@@ -1,0 +1,29 @@
+# conda env => lt-proj
+
+# === base ML ===
+torch
+numpy>=1.24
+pandas>=2.0
+
+# === LLM loading + training ===
+transformers>=4.41.0
+accelerate>=0.30.0
+safetensors
+huggingface_hub
+sentencepiece
+peft                    # lora expert fine-tuning — the main addition
+
+# === data ===
+datasets>=2.19.0
+
+# === steering vectors ===
+scikit-learn            # logistic probe + pca — the other main addition
+
+
+# === config + utils ===
+pyyaml>=6.0
+tqdm>=4.66
+
+# === evaluation ===
+sentence-transformers
+matplotlib>=3.8

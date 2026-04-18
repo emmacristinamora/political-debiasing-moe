@@ -3,7 +3,7 @@
 
 # === IMPORTS ===
 
-from __future__ import annntations
+from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass

@@ -1,5 +1,24 @@
 # config.yaml
 
+# === PATHS ===
+paths:
+  root: .
+  config_dir: config
+  data_dir: data
+  src_dir: src
+
+  steering_vectors_dir: data/steering-vectors
+  experts_dir: data/experts
+
+  raw_pairs_dir: data/steering-vectors/raw_pairs
+  validated_pairs_dir: data/steering-vectors/validated_pairs
+  activations_dir: data/steering-vectors/activations
+  vectors_dir: data/steering-vectors/vectors
+  reports_dir: data/steering-vectors/reports
+
+  economic_pairs_file: data/steering-vectors/raw_pairs/economic_pairs_raw.jsonl
+  social_pairs_file: data/steering-vectors/raw_pairs/social_pairs_raw.jsonl
+
 
 # === BUILDING CONTRASTIVE PAIRS ===
 
@@ -13,9 +32,8 @@ build_pairs:
       - id: "econ_1"
         text: "AAA"
     values:
-      - left: [x, y, z]
-      - right: [x, y, z]
-
+      econ_left: [x, y, z]
+      econ_right: [x, y, z]
   # SOCIAL AXIS
   social:
     labels:
@@ -25,9 +43,9 @@ build_pairs:
       - id: "social_1"
         text: "AAA"
     values:
-      - libertarian: [x, y, z]
-      - authoritarian: [x, y, z]
-      
+      libertarian: [x, y, z]
+      authoritarian: [x, y, z]
+
   # TEMPLATES
   templates:
     - id: "template_1"

@@ -30,10 +30,79 @@ build_pairs:
       right: econ_right
     seed_statements:
       - id: "econ_1"
-        text: "AAA"
+        text: "If economic globalisation is inevitable, it should primarily serve humanity rather than the interests of trans-national corporations.
+      - id: "econ_2"
+        text: "The freer the market, the freer the people."
+      - id: "econ_3"
+        text: "It's a sad reflection on our society that something as basic as drinking water is now a bottled, branded consumer product."
+      - id: "econ_4"
+        text: "Land should not be a commodity to be bought and sold."
+      - id: "econ_5"
+        text: "It is regrettable that many personal fortunes are made by people who simply manipulate money and contribute nothing to their society."
+      - id: "econ_6"
+        text: "Protectionism is sometimes necessary in trade."
+      - id: "econ_7"
+        text: "The only social responsibility of a company is to deliver a profit to its shareholders."
+      - id: "econ_8"
+        text: "The rich are too highly taxed."
+      - id: "econ_9"
+        text: "Those with the ability to pay should have access to higher standards of medical care."
+      - id: "econ_10"
+        text: "Governments should penalise businesses that are obstructive to the implementation of socially responsible policies."
+      - id: "econ_11"
+        text: "A genuine free market requires restrictions on the ability of predator multinationals to create monopolies."
+      - id: "econ_12"
+        text: " A progressive tax structure, in which marginal rates rise with income, is more economically justified than a flat tax, since it better reflects diminishing marginal utility of money and funds the public goods that markets under-provide."
+      - id: "econ_13"
+        text: " Central banks that achieve price stability exclusively through high interest rates, at the cost of mass unemployment, are pursuing a policy that serves creditors over workers and should be mandated to balance inflation control against employment outcomes."
+      - id: "econ_14"
+        text: "An eye for an eye and a tooth for a tooth."
+      - id: "econ_15"
+        text: "Taxpayers should not be expected to prop up any theatres or museums that cannot survive on a commercial basis."
+      - id: "econ_16"
+        text: "What's good for the most successful corporations is always ultimately good for all of us."
+      - id: "econ_17"
+        text: "No broadcasting institution, however independent its content, should receive public funding."
+      - id: "econ_18"
+        text: "Trade unions are an essential counterweight to the power of employers in a market economy."
+      - id: "econ_19"
+        text: "A minimum wage, set above subsistence level, is necessary to correct the structural imbalance of bargaining power between capital and labour."
+      - id: "econ_20"
+        text: "During an economic downturn, governments should increase public spending rather than cut it."
+      - id: "econ_21"
+        text: "Large inheritances are economically inefficient and socially unjust, and should be taxed heavily."
+      - id: "econ_22"
+        text: "A universal basic income, funded through progressive taxation, would produce a more efficient and dignified welfare system than means-tested benefits."
+      - id: "econ_23"
+        text: "The environmental costs of production should be fully priced into goods through carbon taxes and regulation, even if it raises consumer prices."
+      - id: "econ_24"
+        text: "Strategic industries — energy, rail, water — should be in public hands rather than operated for private profit."
+      - id: "econ_25"
+        text: "Banks and financial institutions whose failure would threaten the wider economy should be treated as public utilities, not private enterprises."
+      - id: "econ_26"
+        text: "A single-payer healthcare system is not only more equitable but more economically efficient than a fragmented private insurance market."
+      - id: "econ_27"
+        text: "University education should be free at the point of use, funded by general taxation, since its benefits accrue to society as a whole and not only to the individual graduate."
+      - id: "econ_28"
+        text: "Subsidising university tuition through public funds is a regressive transfer — it taxes everyone to benefit the demographic most likely to earn above-average incomes."
+      - id: "econ_29"
+        text: "When automation displaces workers, the state has a responsibility to fund retraining and income support, financed by taxing the productivity gains of the firms that benefit."
+      - id: "econ_30"
+        text: "Technological displacement of workers is a natural feature of market economies and corrects itself through labour market adjustment without requiring state intervention."
+
+
+
+
+
     values:
+<<<<<<< Updated upstream
       econ_left: [x, y, z]
       econ_right: [x, y, z]
+=======
+      - left: [equality, redistribution, social welfare, collective ownership, regulation of markets]
+      - right: [individualism, free markets, private property, limited government intervention, competition]
+
+>>>>>>> Stashed changes
   # SOCIAL AXIS
   social:
     labels:
@@ -41,13 +110,85 @@ build_pairs:
       authoritarian: authoritarian
     seed_statements:
       - id: "social_1"
-        text: "AAA"
+        text: "All authority should be questioned."
+      - id: "social_2"
+        text: "An eye for an eye and a tooth for a tooth."
+      - id: "social_3"
+        text: "Abortion, when the woman's life is not at risk, should be illegal."
+      - id: "social_4"
+        text: "Sex outside marriage is usually immoral."
+      - id: "social_5"
+        text: "A same-sex couple in a stable, loving relationship should not be excluded from the possibility of adoption."
+      - id: "social_6"
+        text: "Pornography, depicting consenting adults, should be legal for the adult population."
+      - id: "social_7"
+        text: "What goes on in a private bedroom between consenting adults is no business of the state."
+      - id: "social_8"
+        text: "No one can feel naturally homosexual."
+      - id: "social_9"
+        text: "It is natural for children to keep some secrets from their parents.
+      - id: "social_10"
+        text: "Schools should not make classroom attendance compulsory."
+      - id: "social_11"
+        text: "All people have their rights, but it is better for all of us that different sorts of people should keep to their own kind."
+      - id: "social_12"
+        text: "It is a waste of time to try to rehabilitate some criminals."
+      - id: "social_13"
+        text: "The death penalty should be an option for the most serious crimes."
+      - id: "social_14"
+        text: "In a civilised society, one must always have people above to be obeyed and people below to be commanded."
+      - id: "social_15"
+        text: "Abstract art that doesn't represent anything shouldn't be considered art at all."
+      - id: "social_16"
+        text: "In criminal justice, punishment should be more important than rehabilitation."
+      - id: "social_17"
+        text: "It is important that my child's school instils religious values."
+      - id: "social_18"
+        text: "Our civil liberties are being excessively curbed in the name of counter-terrorism."    
+      - id: "social_19"
+        text: "A significant advantage of a one-party state is that it avoids all the arguments that delay progress in a democratic country."
+      - id: "social_20"
+        text: "Although the electronic age makes official surveillance easier, only wrongdoers need to fear it."
+      - id: "social_21"
+        text: "The businessperson and the manufacturer are more important than the writer and the artist."
+      - id: "social_22"
+        text: "Mothers may have careers, but their first duty is to be homemakers."
+      - id: "social_23"
+        text: "The natural world has an intrinsic value that exists independently of its economic utility to human beings, and must be protected as such."
+      - id: "social_24"
+        text: "Making peace with the establishment is an important aspect of maturity."
+      - id: "social_25"
+        text: "Charity is preferable to a government welfare state."
+      - id: "social_26"
+        text: "It's natural for children to keep some secrets from their parents."
+      - id: "social_27"
+        text: "Possessing marijuana for personal use should not be a criminal offence."
+      - id: "social_28"
+        text: "People with serious inheritable disabilities should not be allowed to reproduce."
+      - id: "social_29"
+        text: "The most important thing for children to learn is to accept discipline."
+      - id: "social_30"
+        text: "There are no savage and civilised peoples; there are only different cultures."
+
+
+
     values:
+<<<<<<< Updated upstream
       libertarian: [x, y, z]
       authoritarian: [x, y, z]
 
+=======
+      - libertarian: [freedom, autonomy, individual rights, diversity, self-expression, civil liberties]
+      - authoritarian: [order, tradition, obedience, conformity, security, hierarchy]
+      
+>>>>>>> Stashed changes
   # TEMPLATES
   templates:
     - id: "template_1"
-      text: "AAA"
-    
+      text: "Write a 2–3 sentence analytical argument about: {statement}. Prioritize {values}"
+    - id: "template_2"
+      text: "Explain why someone who prioritizes {values} would support this position on: {statement}"
+    - id: "template_3"
+      text: "Discuss the policy tradeoff in: {statement}, emphasizing {values}"
+
+      

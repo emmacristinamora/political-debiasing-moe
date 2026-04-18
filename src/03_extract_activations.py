@@ -279,16 +279,19 @@ def load_tokenizer_and_model(settings: ExtractionSettings) -> tuple[Any, Any]:
     Returns:
         tuple[Any, Any]: (tokenizer, model)
     """
+    print(f"[model] Loading tokenizer: {settings.model_name}")
     tokenizer = AutoTokenizer.from_pretrained(settings.model_name, trust_remote_code=True)
 
     if tokenizer.pad_token is None:
         if tokenizer.eos_token is not None:
             tokenizer.pad_token = tokenizer.eos_token
+            print(f"[model] No pad_token found — reusing eos_token ({tokenizer.eos_token!r})")
         else:
             raise ValueError(
                 f"Tokenizer for {settings.model_name} has no pad_token and no eos_token to reuse."
             )
 
+    print(f"[model] Loading model weights: {settings.model_name} | dtype={settings.dtype} | device={settings.device}")
     model = AutoModelForCausalLM.from_pretrained(
         settings.model_name,
         torch_dtype=VALID_DTYPES[settings.dtype],
@@ -296,6 +299,7 @@ def load_tokenizer_and_model(settings: ExtractionSettings) -> tuple[Any, Any]:
     )
     model.to(settings.device)
     model.eval()
+    print(f"[model] Model loaded — {get_model_layer_count(model)} layers | hidden_dim={model.config.hidden_size}")
 
     return tokenizer, model
 
@@ -392,6 +396,14 @@ def extract_pair_layer_vectors(
     input_ids = encoded["input_ids"].to(settings.device)
     attention_mask = encoded["attention_mask"].to(settings.device)
 
+    seq_len = input_ids.shape[1]
+    if seq_len == settings.max_length:
+        print(
+            f"[WARNING] Pair '{pair_record['id']}' hit max_length={settings.max_length} — "
+            f"one or both prompts may have been truncated. "
+            f"Consider increasing max_length in config."
+        )
+
     token_counts = {
         "pos": int(attention_mask[0].sum().item()),
         "neg": int(attention_mask[1].sum().item()),
@@ -465,7 +477,9 @@ def build_activation_store(
     token_counts_pos: list[int] = []
     token_counts_neg: list[int] = []
 
-    for record in records:
+    n_total = len(records)
+    for i, record in enumerate(records, start=1):
+        print(f"[extraction] Pair {i}/{n_total} | id={record['id']}")
         layer_vectors, token_counts = extract_pair_layer_vectors(
             pair_record=record,
             tokenizer=tokenizer,
@@ -590,18 +604,34 @@ def main() -> None:
     if axis not in VALID_AXES:
         raise ValueError(f"Unsupported axis: {axis}")
 
+    print(f"\n{'='*60}")
+    print(f"[start] Axis: {axis}")
+    print(f"[start] Config: {CONFIG_PATH}")
+
     config = load_yaml(CONFIG_PATH)
     settings = build_settings(config)
+
+    print(f"[config] Model: {settings.model_name}")
+    print(f"[config] Layers: {settings.layers}")
+    print(f"[config] Pooling: {settings.pooling} | max_length: {settings.max_length} | dtype: {settings.dtype} | device: {settings.device}")
+    print(f"{'='*60}\n")
 
     validated_pairs_path = get_validated_pairs_path(axis)
     activations_output_path, report_output_path = get_hardcoded_output_paths(axis)
 
+    print(f"[io] Input:  {validated_pairs_path}")
+    print(f"[io] Output: {activations_output_path}")
+    print(f"[io] Report: {report_output_path}\n")
+
     records = load_jsonl(validated_pairs_path)
     validate_pair_records(records, axis)
+    print(f"[data] Loaded {len(records)} validated pairs\n")
 
     tokenizer, model = load_tokenizer_and_model(settings)
     validate_requested_layers(settings, model)
+    print(f"[model] Layers {settings.layers} validated against model\n")
 
+    print(f"[extraction] Starting extraction for {len(records)} pairs across {len(settings.layers)} layers...")
     artifact = build_activation_store(
         records=records,
         tokenizer=tokenizer,
@@ -609,6 +639,7 @@ def main() -> None:
         settings=settings,
         axis=axis,
     )
+    print(f"[extraction] Done\n")
 
     report = build_extraction_report(
         axis=axis,
@@ -621,10 +652,14 @@ def main() -> None:
     save_pt(artifact, activations_output_path)
     save_json(report, report_output_path)
 
-    print(f"Axis: {axis}")
-    print(f"Loaded {len(records)} validated pairs from {validated_pairs_path}")
-    print(f"Saved activations to {activations_output_path}")
-    print(f"Saved report to {report_output_path}")
+    print(f"\n{'='*60}")
+    print(f"[done] Axis:       {axis}")
+    print(f"[done] Pairs:      {len(records)}")
+    print(f"[done] Hidden dim: {report['hidden_dim']}")
+    print(f"[done] Avg tokens: pos={report['avg_pos_tokens']:.1f} | neg={report['avg_neg_tokens']:.1f}")
+    print(f"[done] Activations saved to: {activations_output_path}")
+    print(f"[done] Report saved to:      {report_output_path}")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+{
+  "input_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/steering-vectors/raw_pairs/economic_pairs_raw.jsonl",
+  "total_records": 90,
+  "validated_records": 90,
+  "rejected_records": 0,
+  "max_length_ratio": 1.5,
+  "reject_reason_counts": {}
+}

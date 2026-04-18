@@ -294,10 +294,10 @@ def load_tokenizer_and_model(settings: ExtractionSettings) -> tuple[Any, Any]:
     print(f"[model] Loading model weights: {settings.model_name} | dtype={settings.dtype} | device={settings.device}")
     model = AutoModelForCausalLM.from_pretrained(
         settings.model_name,
-        torch_dtype=VALID_DTYPES[settings.dtype],
+        dtype=VALID_DTYPES[settings.dtype],
+        device_map=settings.device,
         trust_remote_code=True,
     )
-    model.to(settings.device)
     model.eval()
     print(f"[model] Model loaded — {get_model_layer_count(model)} layers | hidden_dim={model.config.hidden_size}")
 

@@ -30,8 +30,8 @@ mkdir -p data/steering-vectors/vectors
 mkdir -p data/steering-vectors/reports
 
 # env — lt-proj is a conda env, not a venv
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate lt-proj
+source "$REPO_ROOT/.venv/bin/activate"
+
 
 # cache
 export HF_HOME="$REPO_ROOT/.cache/huggingface"

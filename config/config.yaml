@@ -1,6 +1,7 @@
 # config.yaml
 
 # === PATHS ===
+
 paths:
   root: .
   config_dir: config
@@ -20,7 +21,7 @@ paths:
   social_pairs_file: data/steering-vectors/raw_pairs/social_pairs_raw.jsonl
 
 
-# === BUILDING CONTRASTIVE PAIRS ===
+# === 01 BUILDING CONTRASTIVE PAIRS ===
 
 build_pairs:
   # ECONOMIC AXIS
@@ -30,7 +31,7 @@ build_pairs:
       right: econ_right
     seed_statements:
       - id: "econ_1"
-        text: "If economic globalisation is inevitable, it should primarily serve humanity rather than the interests of trans-national corporations.
+        text: "If economic globalisation is inevitable, it should primarily serve humanity rather than the interests of trans-national corporations."
       - id: "econ_2"
         text: "The freer the market, the freer the people."
       - id: "econ_3"
@@ -52,9 +53,9 @@ build_pairs:
       - id: "econ_11"
         text: "A genuine free market requires restrictions on the ability of predator multinationals to create monopolies."
       - id: "econ_12"
-        text: " A progressive tax structure, in which marginal rates rise with income, is more economically justified than a flat tax, since it better reflects diminishing marginal utility of money and funds the public goods that markets under-provide."
+        text: "A progressive tax structure, in which marginal rates rise with income, is more economically justified than a flat tax, since it better reflects diminishing marginal utility of money and funds the public goods that markets under-provide."
       - id: "econ_13"
-        text: " Central banks that achieve price stability exclusively through high interest rates, at the cost of mass unemployment, are pursuing a policy that serves creditors over workers and should be mandated to balance inflation control against employment outcomes."
+        text: "Central banks that achieve price stability exclusively through high interest rates, at the cost of mass unemployment, are pursuing a policy that serves creditors over workers and should be mandated to balance inflation control against employment outcomes."
       - id: "econ_14"
         text: "An eye for an eye and a tooth for a tooth."
       - id: "econ_15"
@@ -89,20 +90,10 @@ build_pairs:
         text: "When automation displaces workers, the state has a responsibility to fund retraining and income support, financed by taxing the productivity gains of the firms that benefit."
       - id: "econ_30"
         text: "Technological displacement of workers is a natural feature of market economies and corrects itself through labour market adjustment without requiring state intervention."
-
-
-
-
-
     values:
-<<<<<<< Updated upstream
-      econ_left: [x, y, z]
-      econ_right: [x, y, z]
-=======
-      - left: [equality, redistribution, social welfare, collective ownership, regulation of markets]
-      - right: [individualism, free markets, private property, limited government intervention, competition]
+      econ_left: [equality, redistribution, social welfare, collective ownership, regulation of markets]
+      econ_right: [individualism, free markets, private property, limited government intervention, competition]
 
->>>>>>> Stashed changes
   # SOCIAL AXIS
   social:
     labels:
@@ -126,7 +117,7 @@ build_pairs:
       - id: "social_8"
         text: "No one can feel naturally homosexual."
       - id: "social_9"
-        text: "It is natural for children to keep some secrets from their parents.
+        text: "It is natural for children to keep some secrets from their parents."
       - id: "social_10"
         text: "Schools should not make classroom attendance compulsory."
       - id: "social_11"
@@ -144,7 +135,7 @@ build_pairs:
       - id: "social_17"
         text: "It is important that my child's school instils religious values."
       - id: "social_18"
-        text: "Our civil liberties are being excessively curbed in the name of counter-terrorism."    
+        text: "Our civil liberties are being excessively curbed in the name of counter-terrorism."
       - id: "social_19"
         text: "A significant advantage of a one-party state is that it avoids all the arguments that delay progress in a democratic country."
       - id: "social_20"
@@ -169,19 +160,10 @@ build_pairs:
         text: "The most important thing for children to learn is to accept discipline."
       - id: "social_30"
         text: "There are no savage and civilised peoples; there are only different cultures."
-
-
-
     values:
-<<<<<<< Updated upstream
-      libertarian: [x, y, z]
-      authoritarian: [x, y, z]
+      libertarian: [freedom, autonomy, individual rights, diversity, self-expression, civil liberties]
+      authoritarian: [order, tradition, obedience, conformity, security, hierarchy]
 
-=======
-      - libertarian: [freedom, autonomy, individual rights, diversity, self-expression, civil liberties]
-      - authoritarian: [order, tradition, obedience, conformity, security, hierarchy]
-      
->>>>>>> Stashed changes
   # TEMPLATES
   templates:
     - id: "template_1"
@@ -191,4 +173,26 @@ build_pairs:
     - id: "template_3"
       text: "Discuss the policy tradeoff in: {statement}, emphasizing {values}"
 
-      
+
+# === 02 VALIDATING PAIRS ===
+
+validate_pairs:
+  max_length_ratio: 1.5
+
+
+# === 03 EXTRACTING ACTIVATIONS ===
+
+extract_activations:
+  model_name: "mistralai/Mistral-7B-v0.1"
+  layers: [8, 12, 16, 20, 24]
+  pooling: "mean"
+  tokenizer:
+    padding: true
+    truncation: true
+    max_length: 256
+  runtime:
+    device: "cuda"
+    dtype: "float16"
+    batch_size: 2
+  save:
+    format: "pt"

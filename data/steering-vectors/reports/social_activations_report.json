@@ -1,0 +1,19 @@
+{
+  "axis": "social",
+  "validated_input_file": "/home/3210604/projects/political-debiasing-moe/data/steering-vectors/validated_pairs/social_pairs_validated.jsonl",
+  "activations_output_file": "/home/3210604/projects/political-debiasing-moe/data/steering-vectors/activations/social_activations.pt",
+  "model_name": "mistralai/Mistral-7B-v0.1",
+  "layers": [
+    8,
+    12,
+    16,
+    20,
+    24
+  ],
+  "pooling": "mean",
+  "max_length": 256,
+  "num_pairs": 90,
+  "hidden_dim": 4096,
+  "avg_pos_tokens": 43.4,
+  "avg_neg_tokens": 46.4
+}

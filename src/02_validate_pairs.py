@@ -1,0 +1,1 @@
+# 02_validate_pairs.py — Validate, filter, and report on raw contrastive pairs to keep only high-quality controlled examples for steering extraction.

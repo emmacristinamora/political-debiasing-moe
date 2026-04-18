@@ -1,0 +1,1 @@
+# 01_build_pairs.py — Build raw contrastive prompt pairs for the economic and social Political Compass axes from seed statements and templates.

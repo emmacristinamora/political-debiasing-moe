@@ -1,0 +1,1 @@
+# 03_extract_activations.py — Run the base model on validated pairs and save pooled hidden-state activations from the selected layers.

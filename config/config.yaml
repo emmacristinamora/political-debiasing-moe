@@ -1,0 +1,35 @@
+# config.yaml
+
+
+# === BUILDING CONTRASTIVE PAIRS ===
+
+build_pairs:
+  # ECONOMIC AXIS
+  economic:
+    labels:
+      left: econ_left
+      right: econ_right
+    seed_statements:
+      - id: "econ_1"
+        text: "AAA"
+    values:
+      - left: [x, y, z]
+      - right: [x, y, z]
+
+  # SOCIAL AXIS
+  social:
+    labels:
+      libertarian: libertarian
+      authoritarian: authoritarian
+    seed_statements:
+      - id: "social_1"
+        text: "AAA"
+    values:
+      - libertarian: [x, y, z]
+      - authoritarian: [x, y, z]
+      
+  # TEMPLATES
+  templates:
+    - id: "template_1"
+      text: "AAA"
+    

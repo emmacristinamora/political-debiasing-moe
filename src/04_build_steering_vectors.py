@@ -1,0 +1,1 @@
+# 04_build_steering_vectors.py — Learn and save the economic and social steering vectors from extracted activations, together with diagnostics.

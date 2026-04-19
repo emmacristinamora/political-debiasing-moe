@@ -1,0 +1,199 @@
+{
+  "axis": "social",
+  "positive_label": "authoritarian",
+  "negative_label": "libertarian",
+  "activation_input_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/steering-vectors/activations/social_activations.pt",
+  "vectors_output_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/steering-vectors/vectors/social_vectors.pt",
+  "model_name": "mistralai/Mistral-7B-v0.1",
+  "layers": [
+    8,
+    12,
+    16,
+    20,
+    24
+  ],
+  "num_pairs": 90,
+  "best_mean_difference_layer": 24,
+  "best_logistic_regression_layer": 8,
+  "final_mean_logistic_cosine": 0.9322193264961243,
+  "aggregation": {
+    "mean_difference": {
+      "layers": [
+        8,
+        12,
+        16,
+        20,
+        24
+      ],
+      "quality_scores": [
+        1.214085355411472,
+        1.707887335523413,
+        5.182501261094906,
+        7.476139569531178,
+        7.935788241592509
+      ],
+      "normalized_weights": [
+        0.05162717356333628,
+        0.07262536814621892,
+        0.22037815620309203,
+        0.31791171305999366,
+        0.3374575890273591
+      ]
+    },
+    "logistic_regression": {
+      "layers": [
+        8,
+        12,
+        16,
+        20,
+        24
+      ],
+      "quality_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "normalized_weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  },
+  "layer_summaries": {
+    "8": {
+      "method_cosine_similarity": 0.7560439705848694,
+      "mean_difference": {
+        "raw_norm": 0.6096082329750061,
+        "mean_projection_pos": 4.523938179016113,
+        "mean_projection_neg": 3.914330005645752,
+        "std_projection_pos": 0.5481090545654297,
+        "std_projection_neg": 0.4514549970626831,
+        "pooled_std": 0.5021131098017041,
+        "separation": 1.214085355411472,
+        "flipped_for_sign": false,
+        "quality_score": 1.214085355411472
+      },
+      "logistic_regression": {
+        "raw_norm": 6.829981803894043,
+        "train_accuracy": 1.0,
+        "mean_projection_pos": 0.3050808012485504,
+        "mean_projection_neg": -0.15580984950065613,
+        "std_projection_pos": 0.06259932368993759,
+        "std_projection_neg": 0.043565329164266586,
+        "pooled_std": 0.05392871791368899,
+        "separation": 8.546293488505434,
+        "flipped_for_sign": false,
+        "quality_score": 1.0
+      }
+    },
+    "12": {
+      "method_cosine_similarity": 0.8562740683555603,
+      "mean_difference": {
+        "raw_norm": 0.703162431716919,
+        "mean_projection_pos": 3.6364004611968994,
+        "mean_projection_neg": 2.9332380294799805,
+        "std_projection_pos": 0.4561310112476349,
+        "std_projection_neg": 0.36188754439353943,
+        "pooled_std": 0.41171476425371,
+        "separation": 1.707887335523413,
+        "flipped_for_sign": false,
+        "quality_score": 1.707887335523413
+      },
+      "logistic_regression": {
+        "raw_norm": 6.524624347686768,
+        "train_accuracy": 1.0,
+        "mean_projection_pos": 0.34139665961265564,
+        "mean_projection_neg": -0.26070311665534973,
+        "std_projection_pos": 0.0716177299618721,
+        "std_projection_neg": 0.04552975296974182,
+        "pooled_std": 0.06000857293077943,
+        "separation": 10.033562653831718,
+        "flipped_for_sign": false,
+        "quality_score": 1.0
+      }
+    },
+    "16": {
+      "method_cosine_similarity": 0.9662600755691528,
+      "mean_difference": {
+        "raw_norm": 1.173502802848816,
+        "mean_projection_pos": 2.1155810356140137,
+        "mean_projection_neg": 0.9420779943466187,
+        "std_projection_pos": 0.26690253615379333,
+        "std_projection_neg": 0.17694418132305145,
+        "pooled_std": 0.22643564992002901,
+        "separation": 5.182501261094906,
+        "flipped_for_sign": false,
+        "quality_score": 5.182501261094906
+      },
+      "logistic_regression": {
+        "raw_norm": 5.212839603424072,
+        "train_accuracy": 1.0,
+        "mean_projection_pos": 0.587176501750946,
+        "mean_projection_neg": -0.5467324256896973,
+        "std_projection_pos": 0.1271333396434784,
+        "std_projection_neg": 0.09883147478103638,
+        "pooled_std": 0.11386515370449966,
+        "separation": 9.958348893844544,
+        "flipped_for_sign": false,
+        "quality_score": 1.0
+      }
+    },
+    "20": {
+      "method_cosine_similarity": 0.9747046232223511,
+      "mean_difference": {
+        "raw_norm": 2.274282693862915,
+        "mean_projection_pos": 1.2317757606506348,
+        "mean_projection_neg": -1.0425071716308594,
+        "std_projection_pos": 0.2710925340652466,
+        "std_projection_neg": 0.3340521454811096,
+        "pooled_std": 0.3042055209282446,
+        "separation": 7.476139569531178,
+        "flipped_for_sign": false,
+        "quality_score": 7.476139569531178
+      },
+      "logistic_regression": {
+        "raw_norm": 3.6951987743377686,
+        "train_accuracy": 1.0,
+        "mean_projection_pos": 1.1081560850143433,
+        "mean_projection_neg": -1.1085978746414185,
+        "std_projection_pos": 0.2177441418170929,
+        "std_projection_neg": 0.19565674662590027,
+        "pooled_std": 0.2069952581532896,
+        "separation": 10.709201647576645,
+        "flipped_for_sign": false,
+        "quality_score": 1.0
+      }
+    },
+    "24": {
+      "method_cosine_similarity": 0.9682728052139282,
+      "mean_difference": {
+        "raw_norm": 3.479254961013794,
+        "mean_projection_pos": 0.3381243348121643,
+        "mean_projection_neg": -3.141129970550537,
+        "std_projection_pos": 0.3384666442871094,
+        "std_projection_neg": 0.5194946527481079,
+        "pooled_std": 0.43842579961086564,
+        "separation": 7.935788241592509,
+        "flipped_for_sign": false,
+        "quality_score": 7.935788241592509
+      },
+      "logistic_regression": {
+        "raw_norm": 2.869943141937256,
+        "train_accuracy": 1.0,
+        "mean_projection_pos": 1.6783350706100464,
+        "mean_projection_neg": -1.690532922744751,
+        "std_projection_pos": 0.3079369068145752,
+        "std_projection_neg": 0.27993038296699524,
+        "pooled_std": 0.2942670198022342,
+        "separation": 11.448336941118605,
+        "flipped_for_sign": false,
+        "quality_score": 1.0
+      }
+    }
+  }
+}

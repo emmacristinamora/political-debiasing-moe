@@ -1,5 +1,7 @@
 # conda env => lt-proj
 
+# works best with python 3.12
+
 # === base ML ===
 torch
 numpy>=1.24

@@ -9,6 +9,21 @@ from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
 
 
+# === CANONICAL ORDER ===
+
+# single source of truth for the four quadrant/expert identities and their
+# canonical ordering. use this tuple whenever code needs to move between
+# dict-keyed policies and ordered representations (logits, probability
+# vectors, diagnostics dumps, per-expert aggregation). all router, editor,
+# and expert-manager surfaces must respect these exact keys and this order.
+CANONICAL_QUADRANT_ORDER: tuple[str, ...] = (
+    "left_lib",
+    "left_auth",
+    "right_lib",
+    "right_auth",
+)
+
+
 # === DATACLASSES ===
 
 @dataclass
@@ -48,18 +63,20 @@ class RouterConfig:
     - KL anchoring should keep learned routing near the intended debias geometry
 
     Notes:
-    - v1 may run in heuristic-only mode
-    - the interface should still expose calibrated mode so teammates can extend it later
+    - v1 is heuristic-only; only beta, temperature, fallback_to_uniform_if_centered,
+      and center_threshold are active
+    - kl_weight, entropy_weight, router_hidden_dim, and use_calibrated_router=True
+      are placeholders reserved for the future calibrated extension
     """
 
-    use_calibrated_router: bool = False
-    beta: float = 1.0
-    temperature: float = 1.0
-    kl_weight: float = 0.1
-    entropy_weight: float = 0.01
-    router_hidden_dim: int = 128
-    fallback_to_uniform_if_centered: bool = True
-    center_threshold: float = 0.05
+    use_calibrated_router: bool = False             # v1: keep False; True path is not implemented yet
+    beta: float = 1.0                               # v1 active: scales -beta * q_i in heuristic prior
+    temperature: float = 1.0                        # v1 active: softmax temperature on the prior logits
+    kl_weight: float = 0.1                          # calibrated-mode placeholder, unused in v1
+    entropy_weight: float = 0.01                    # calibrated-mode placeholder, unused in v1
+    router_hidden_dim: int = 128                    # calibrated-mode placeholder, unused in v1
+    fallback_to_uniform_if_centered: bool = True    # v1 active: near-center prompts get uniform prior
+    center_threshold: float = 0.05                  # v1 active: threshold on bias_magnitude for fallback
 
 
 @dataclass
@@ -74,6 +91,8 @@ class ExpertConfig:
 
     Notes:
     - experts must remain separate modules and must not be merged into the base model
+    - the checkpoint fields map to CANONICAL_QUADRANT_ORDER
+      (left_lib_checkpoint, left_auth_checkpoint, right_lib_checkpoint, right_auth_checkpoint)
     """
 
     left_lib_checkpoint: Path
@@ -140,6 +159,14 @@ class PromptState:
     - bias magnitude or distance from center
 
     This object is the output of InputTransformer and the input to Router.
+
+    Router input contract (v1, heuristic):
+    - active routing inputs: quadrant_scores, bias_magnitude
+    - diagnostics only (not primary routing signal): economic_score, social_score
+    - carried for future calibrated routing only: hidden_representation
+    - traceability only (not a heuristic routing signal): prompt_text, metadata
+
+    quadrant_scores keys: see CANONICAL_QUADRANT_ORDER (module-level constant).
     """
 
     prompt_text: str
@@ -161,8 +188,18 @@ class RouterState:
     - calibrated router policy pi
     - optional training losses or diagnostics
 
+    Router output contract:
+    - heuristic_prior: normalized distribution over CANONICAL_QUADRANT_ORDER, sums to 1
+    - calibrated_policy: normalized distribution over the same key set;
+      equals heuristic_prior in heuristic-only mode
+    - diagnostics: non-essential trace data, e.g. raw quadrant_scores,
+      whether center fallback was used, optional pre-softmax logits
+    - losses: may be empty in heuristic-only inference mode
+
     Notes:
-    - in heuristic-only mode, pi may equal pi_0
+    - heuristic_prior is always populated
+    - downstream editor consumes this object directly
+    - when serializing to an ordered vector, iterate CANONICAL_QUADRANT_ORDER
     """
 
     heuristic_prior: dict[str, float]
@@ -349,6 +386,26 @@ class Router:
     - optionally apply a lightweight calibrated correction around log(pi_0)
     - expose KL and entropy terms for router training
 
+    Scope (v1):
+    - heuristic-only: deterministic pi_0, no learned calibration,
+      no router training loop, no task/KL/entropy optimization
+    - calibrated methods remain part of the interface but are inactive
+      until a future extension enables them
+    - consumes precomputed prompt geometry from PromptState; does not
+      run any model forward pass
+
+    Input contract:
+    - treat prompt_state.quadrant_scores as authoritative input geometry
+    - do not recompute quadrant scores from economic_score / social_score
+    - do not use prompt_text for heuristic routing
+    - do not perform any model forward pass
+
+    Output contract:
+    - policies are normalized dicts keyed by CANONICAL_QUADRANT_ORDER
+    - use CANONICAL_QUADRANT_ORDER whenever converting to/from ordered logits
+      or probability vectors (softmax inputs/outputs, diagnostics)
+    - these keys must stay aligned with ExpertConfig / ExpertManager naming
+
     Important:
     - prompts near a quadrant should downweight that quadrant and upweight
       opposite or adjacent quadrant
@@ -357,7 +414,7 @@ class Router:
     """
 
     def __init__(self, config: RouterConfig) -> None:
-        # store router hyperparameters and initialize optional calibration module
+        # store router hyperparameters; no calibration module is instantiated in heuristic v1
         raise NotImplementedError
 
     def build_heuristic_prior(self, prompt_state: PromptState) -> dict[str, float]:
@@ -368,6 +425,9 @@ class Router:
         - use counterbalancing geometry rather than same-direction amplification
         - high alignment with one quadrant should penalize that quadrant in pi_0
         - prompts near the center may optionally fall back to a uniform prior
+
+        v1:
+        - this is the active routing path
         """
         raise NotImplementedError
 
@@ -378,6 +438,9 @@ class Router:
         Notes:
         - in heuristic-only mode this can return zeros or be skipped
         - this is the delta(h) term from the original routing plan
+
+        v1:
+        - inactive; returns zeros (or is not invoked) because use_calibrated_router is False
         """
         raise NotImplementedError
 
@@ -392,6 +455,10 @@ class Router:
         Logic:
         - compute pi = softmax(log(pi_0) + delta(h))
         - keep routing behavior close to the intended debiasing geometry
+
+        v1:
+        - only meaningful when calibrated routing is enabled; with zero correction
+          the output matches the heuristic prior
         """
         raise NotImplementedError
 
@@ -410,6 +477,9 @@ class Router:
         Notes:
         - these losses may be unused in inference-only mode, but the interface
           should still expose them for future router training
+
+        v1:
+        - placeholder only; heuristic inference mode does not optimize these losses
         """
         raise NotImplementedError
 
@@ -422,6 +492,9 @@ class Router:
         - optionally compute calibrated policy pi around pi_0
         - compute diagnostics and optional losses
         - return RouterState for downstream editing
+
+        v1:
+        - when use_calibrated_router is False, calibrated_policy must match heuristic_prior
         """
         raise NotImplementedError
 
@@ -440,6 +513,7 @@ class ExpertManager:
     Important:
     - this component does not decide expert weights
     - all four experts should be available to the editor in dense mode
+    - expert identities and iteration order follow CANONICAL_QUADRANT_ORDER
     """
 
     def __init__(
@@ -456,7 +530,7 @@ class ExpertManager:
         """
         Load all four quadrant experts without merging them into the base model.
 
-        Experts:
+        Experts (keys follow CANONICAL_QUADRANT_ORDER):
         - left_lib
         - left_auth
         - right_lib
@@ -506,6 +580,11 @@ class Editor:
     - compute correction based on current ideological alignment
     - update weights and recompute the mixture
     - stop after convergence or max_edit_steps
+
+    Inputs:
+    - consumes RouterState as produced by Router.route()
+    - mixture weights are keyed by CANONICAL_QUADRANT_ORDER, matching router
+      output and ExpertConfig / ExpertManager naming
 
     Important:
     - the editor owns finalization

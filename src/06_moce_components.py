@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
 
+from torch import nn
+
 
 # === CANONICAL ORDER ===
 
@@ -521,8 +523,37 @@ class Router:
     """
 
     def __init__(self, config: RouterConfig) -> None:
-        # store router hyperparameters; no calibration module is instantiated in heuristic v1
+        # store router hyperparameters; calibration setup happens below only in calibrated mode
         self.config = config
+
+        if not config.use_calibrated_router:
+            # heuristic mode: keep calibration attributes inert so downstream code
+            # can introspect them uniformly without branching on the flag
+            self.calibration_module: nn.Module | None = None
+            self.calibration_input_dim: int | None = None
+            return
+
+        # calibrated mode: router_hidden_dim is reinterpreted here as the
+        # input dimension expected by the calibration module (i.e. the
+        # dimensionality of PromptState.hidden_representation). a dedicated
+        # field will replace this overload in a later step.
+        router_hidden_dim = config.router_hidden_dim
+        if not isinstance(router_hidden_dim, int) or isinstance(router_hidden_dim, bool):
+            raise ValueError(
+                "RouterConfig.router_hidden_dim must be a positive int when "
+                f"use_calibrated_router=True; got {type(router_hidden_dim).__name__}"
+            )
+        if router_hidden_dim <= 0:
+            raise ValueError(
+                "RouterConfig.router_hidden_dim must be a positive int when "
+                f"use_calibrated_router=True; got {router_hidden_dim}"
+            )
+
+        self.calibration_input_dim: int | None = router_hidden_dim
+        self.calibration_module: nn.Module | None = nn.Linear(
+            router_hidden_dim,
+            len(CANONICAL_QUADRANT_ORDER),
+        )
 
     def _validate_prompt_state(self, prompt_state: PromptState) -> None:
         """

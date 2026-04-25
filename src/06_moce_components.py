@@ -972,20 +972,21 @@ class Router:
         - validate prompt_state
         - build heuristic prior pi_0
         - in heuristic mode, set calibrated_policy = pi_0 and losses = {}
+        - in calibrated mode, compute delta(h), combine with pi_0 to get pi,
+          and compute regularization losses (KL anchor + raw entropy)
         - populate diagnostics with: beta, temperature, used_center_fallback,
-          quadrant_scores (copy), heuristic_prior (copy)
+          quadrant_scores (copy), heuristic_prior (copy); in calibrated mode
+          additionally include correction_logits (copy) and calibrated_policy
+          (copy)
 
         Raises:
-        - NotImplementedError if RouterConfig.use_calibrated_router is True
+        - ValueError propagated from compute_router_correction /
+          combine_prior_and_correction / compute_router_losses (e.g. invalid
+          hidden_representation, missing calibration module, malformed
+          distributions)
         """
         self._validate_prompt_state(prompt_state)
         heuristic_prior = self.build_heuristic_prior(prompt_state)
-
-        if self.config.use_calibrated_router:
-            raise NotImplementedError(
-                "calibrated routing is not implemented in heuristic v1; "
-                "set RouterConfig.use_calibrated_router=False"
-            )
 
         diagnostics = {
             "beta": self.config.beta,
@@ -994,12 +995,31 @@ class Router:
             "quadrant_scores": dict(prompt_state.quadrant_scores),
             "heuristic_prior": dict(heuristic_prior),
         }
-        calibrated_policy = dict(heuristic_prior)
+
+        if not self.config.use_calibrated_router:
+            calibrated_policy = dict(heuristic_prior)
+            return RouterState(
+                heuristic_prior=heuristic_prior,
+                calibrated_policy=calibrated_policy,
+                diagnostics=diagnostics,
+                losses={},
+            )
+
+        correction_logits = self.compute_router_correction(prompt_state)
+        calibrated_policy = self.combine_prior_and_correction(
+            heuristic_prior,
+            correction_logits,
+        )
+        losses = self.compute_router_losses(heuristic_prior, calibrated_policy)
+
+        diagnostics["correction_logits"] = dict(correction_logits)
+        diagnostics["calibrated_policy"] = dict(calibrated_policy)
+
         return RouterState(
             heuristic_prior=heuristic_prior,
             calibrated_policy=calibrated_policy,
             diagnostics=diagnostics,
-            losses={},
+            losses=losses,
         )
 
 

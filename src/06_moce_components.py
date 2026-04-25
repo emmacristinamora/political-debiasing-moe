@@ -176,6 +176,25 @@ class PromptState:
     - traceability only (not a heuristic routing signal): prompt_text, metadata
 
     quadrant_scores keys: see CANONICAL_QUADRANT_ORDER (module-level constant).
+
+    hidden_representation contract:
+    - heuristic routing does NOT consume hidden_representation; it may be
+      omitted or carried purely for diagnostics in heuristic mode.
+    - calibrated routing (use_calibrated_router=True) REQUIRES it. When
+      required, hidden_representation must be:
+        - a 1D numeric vector with shape [hidden_dim]
+        - finite (no NaN, no inf)
+        - drawn from the same base model, the same layer (or layer
+          aggregation), and the same token-pooling strategy used to
+          extract steering vectors and to train the calibration module
+    - the field is intentionally typed as Any at this step to keep the
+      backbone choice (e.g., torch.Tensor vs np.ndarray) flexible; the
+      contract above is enforced by Router in calibrated mode, not by
+      the dataclass itself.
+    - dimensional consistency: hidden_dim must match the input dimension
+      expected by the loaded calibration module; a mismatch must surface
+      as a runtime error at routing time, not be silently broadcast or
+      truncated.
     """
 
     prompt_text: str
@@ -457,6 +476,29 @@ class Router:
     - in calibrated mode, prompt_state.hidden_representation is the sole
       input to the correction module
 
+    hidden_representation usage (calibrated mode):
+    - consumed directly by the correction module; Router does not
+      recompute, re-pool, re-normalize, or otherwise transform it
+    - assumed to be produced upstream by InputTransformer and to satisfy
+      the PromptState.hidden_representation contract (1D, numeric, finite,
+      shape [hidden_dim]) drawn from the same model/layer/pooling used
+      during steering-vector extraction and calibration training
+    - dimensional consistency is mandatory: hidden_dim must match the
+      input dimension declared by the loaded calibration module's
+      checkpoint metadata; any mismatch must raise an error at runtime
+      rather than be silently reshaped, padded, or truncated
+
+    Calibrated-mode validation requirement (to be implemented later in
+    compute_router_correction; not implemented in this step):
+    - hidden_representation must be present (not None)
+    - it must be a 1D numeric vector
+    - all entries must be finite (no NaN, no inf)
+    - its dimension must match the calibration module's expected input
+    - any violation must raise ValueError with a precise message
+      identifying the failed condition (presence / shape / finiteness /
+      dimensional mismatch)
+    - heuristic-mode routing must NOT trigger any of these checks
+
     Output contract:
     - policies are normalized dicts keyed by CANONICAL_QUADRANT_ORDER
     - iterate CANONICAL_QUADRANT_ORDER when converting to/from ordered logits
@@ -633,6 +675,15 @@ class Router:
         Notes:
         - returns per-quadrant logits when calibrated mode is enabled
         - not implemented in v1 (heuristic-only)
+
+        Required validation (when implemented):
+        - prompt_state.hidden_representation must be non-None
+        - it must be a 1D numeric vector with finite entries
+        - its dimension must match the loaded calibration module's
+          declared input dimension
+        - any failure raises ValueError naming the violated condition;
+          no silent reshape, pad, truncation, or fallback to pi_0
+        - returned logits keys must equal CANONICAL_QUADRANT_ORDER
         """
         raise NotImplementedError
 

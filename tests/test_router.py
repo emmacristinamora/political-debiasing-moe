@@ -10,6 +10,8 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+import torch
+
 
 # === MODULE LOADING ===
 
@@ -37,18 +39,36 @@ def _make_prompt_state(
     bias_magnitude: Any = 0.5,
     economic_score: float = 0.0,
     social_score: float = 0.0,
+    hidden_representation: Any = None,
 ) -> PromptState:
     if quadrant_scores is None:
         quadrant_scores = {key: 0.0 for key in CANONICAL_QUADRANT_ORDER}
     return PromptState(
         prompt_text="test prompt",
-        hidden_representation=None,
+        hidden_representation=hidden_representation,
         economic_score=economic_score,
         social_score=social_score,
         quadrant_scores=dict(quadrant_scores),
         bias_magnitude=bias_magnitude,
         metadata={},
     )
+
+
+def _calibrated_router(hidden_dim: int = 4) -> Router:
+    return Router(RouterConfig(
+        fallback_to_uniform_if_centered=False,
+        beta=1.0,
+        temperature=1.0,
+        use_calibrated_router=True,
+        router_hidden_dim=hidden_dim,
+    ))
+
+
+def _zero_calibration(router: Router) -> None:
+    # zero out the linear correction head so delta(h) = 0 deterministically
+    with torch.no_grad():
+        router.calibration_module.weight.zero_()
+        router.calibration_module.bias.zero_()
 
 
 # === TESTS ===
@@ -298,13 +318,263 @@ class RouteOutputContractTests(unittest.TestCase):
         )
 
 
-class CalibratedModeTests(unittest.TestCase):
+class CalibratedRouteTests(unittest.TestCase):
 
-    def test_calibrated_mode_raises_not_implemented(self) -> None:
-        router = Router(RouterConfig(use_calibrated_router=True))
-        prompt_state = _make_prompt_state()
-        with self.assertRaises(NotImplementedError):
-            router.route(prompt_state)
+    def setUp(self) -> None:
+        self.hidden_dim = 4
+        self.router = _calibrated_router(hidden_dim=self.hidden_dim)
+        _zero_calibration(self.router)
+        self.skewed_scores = {
+            "left_lib": -0.3,
+            "left_auth": 0.1,
+            "right_lib": 0.4,
+            "right_auth": -0.2,
+        }
+
+    # --- A. missing hidden_representation -------------------------------------
+
+    def test_missing_hidden_representation_raises(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            bias_magnitude=0.5,
+            hidden_representation=None,
+        )
+        with self.assertRaisesRegex(ValueError, "hidden_representation"):
+            self.router.route(prompt_state)
+
+    # --- B. invalid hidden_representation -------------------------------------
+
+    def test_rank_two_tensor_raises(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            hidden_representation=torch.zeros((2, self.hidden_dim)),
+        )
+        with self.assertRaises(ValueError):
+            self.router.route(prompt_state)
+
+    def test_nested_list_raises(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            hidden_representation=[[0.0] * self.hidden_dim],
+        )
+        with self.assertRaises(ValueError):
+            self.router.route(prompt_state)
+
+    def test_wrong_length_raises(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            hidden_representation=[0.0] * (self.hidden_dim - 1),
+        )
+        with self.assertRaises(ValueError):
+            self.router.route(prompt_state)
+
+    def test_non_finite_value_raises(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            hidden_representation=[0.0, float("nan"), 0.0, 0.0],
+        )
+        with self.assertRaises(ValueError):
+            self.router.route(prompt_state)
+
+    # --- C. zero correction reproduces heuristic prior ------------------------
+
+    def test_zero_correction_reproduces_heuristic_prior(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            bias_magnitude=0.5,
+            hidden_representation=[0.7, -0.3, 1.2, 0.0],
+        )
+        state = self.router.route(prompt_state)
+        for key in CANONICAL_QUADRANT_ORDER:
+            self.assertAlmostEqual(
+                state.calibrated_policy[key],
+                state.heuristic_prior[key],
+                places=10,
+            )
+        self.assertAlmostEqual(state.losses["kl"], 0.0, places=12)
+        self.assertIn("entropy", state.losses)
+        self.assertTrue(math.isfinite(state.losses["entropy"]))
+
+    # --- D. non-zero correction shifts the calibrated policy ------------------
+
+    def test_nonzero_bias_increases_favored_quadrant(self) -> None:
+        # zero weights, then push bias on the left_lib output (canonical index 0)
+        with torch.no_grad():
+            self.router.calibration_module.bias[0] = 5.0
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            bias_magnitude=0.5,
+            hidden_representation=[0.0] * self.hidden_dim,
+        )
+        state = self.router.route(prompt_state)
+        self.assertNotEqual(state.calibrated_policy, state.heuristic_prior)
+        self.assertGreater(
+            state.calibrated_policy["left_lib"],
+            state.heuristic_prior["left_lib"],
+        )
+
+    # --- E. diagnostics keys + copy semantics ---------------------------------
+
+    def test_diagnostics_keys_and_copies(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            bias_magnitude=0.5,
+            hidden_representation=[0.1, 0.2, 0.3, 0.4],
+        )
+        state = self.router.route(prompt_state)
+        self.assertEqual(
+            set(state.diagnostics.keys()),
+            {
+                "beta",
+                "temperature",
+                "used_center_fallback",
+                "quadrant_scores",
+                "heuristic_prior",
+                "correction_logits",
+                "calibrated_policy",
+            },
+        )
+        # value equality
+        self.assertEqual(state.diagnostics["quadrant_scores"], prompt_state.quadrant_scores)
+        self.assertEqual(state.diagnostics["heuristic_prior"], state.heuristic_prior)
+        self.assertEqual(state.diagnostics["calibrated_policy"], state.calibrated_policy)
+        # not aliasing the source / returned dicts
+        self.assertIsNot(state.diagnostics["quadrant_scores"], prompt_state.quadrant_scores)
+        self.assertIsNot(state.diagnostics["heuristic_prior"], state.heuristic_prior)
+        self.assertIsNot(state.diagnostics["calibrated_policy"], state.calibrated_policy)
+        # correction_logits is a fresh dict with canonical keys
+        self.assertIsInstance(state.diagnostics["correction_logits"], dict)
+        self.assertEqual(
+            set(state.diagnostics["correction_logits"].keys()),
+            set(CANONICAL_QUADRANT_ORDER),
+        )
+
+    # --- F. losses present with correct keys ----------------------------------
+
+    def test_losses_have_kl_and_entropy(self) -> None:
+        prompt_state = _make_prompt_state(
+            quadrant_scores=self.skewed_scores,
+            bias_magnitude=0.5,
+            hidden_representation=[0.1, 0.2, 0.3, 0.4],
+        )
+        state = self.router.route(prompt_state)
+        self.assertEqual(set(state.losses.keys()), {"kl", "entropy"})
+        self.assertIsInstance(state.losses["kl"], float)
+        self.assertIsInstance(state.losses["entropy"], float)
+        self.assertTrue(math.isfinite(state.losses["kl"]))
+        self.assertTrue(math.isfinite(state.losses["entropy"]))
+
+
+class ComputeRouterCorrectionTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.hidden_dim = 4
+        self.router = _calibrated_router(hidden_dim=self.hidden_dim)
+        _zero_calibration(self.router)
+
+    def test_accepts_torch_tensor(self) -> None:
+        prompt_state = _make_prompt_state(
+            hidden_representation=torch.tensor([0.5, -0.5, 1.0, 0.0]),
+        )
+        out = self.router.compute_router_correction(prompt_state)
+        self.assertEqual(list(out.keys()), list(CANONICAL_QUADRANT_ORDER))
+
+    def test_accepts_python_list(self) -> None:
+        prompt_state = _make_prompt_state(
+            hidden_representation=[0.5, -0.5, 1.0, 0.0],
+        )
+        out = self.router.compute_router_correction(prompt_state)
+        self.assertEqual(list(out.keys()), list(CANONICAL_QUADRANT_ORDER))
+
+    def test_accepts_python_tuple(self) -> None:
+        prompt_state = _make_prompt_state(
+            hidden_representation=(0.5, -0.5, 1.0, 0.0),
+        )
+        out = self.router.compute_router_correction(prompt_state)
+        self.assertEqual(list(out.keys()), list(CANONICAL_QUADRANT_ORDER))
+
+    def test_zeroed_layer_returns_zero_logits(self) -> None:
+        prompt_state = _make_prompt_state(
+            hidden_representation=[0.7, -0.3, 1.2, 0.0],
+        )
+        out = self.router.compute_router_correction(prompt_state)
+        for key in CANONICAL_QUADRANT_ORDER:
+            self.assertAlmostEqual(out[key], 0.0, places=10)
+
+    def test_bias_only_returns_bias_values(self) -> None:
+        # zero weights but distinct biases per output dim; canonical order is
+        # (left_lib, left_auth, right_lib, right_auth) -> bias indices 0..3
+        with torch.no_grad():
+            self.router.calibration_module.bias.copy_(
+                torch.tensor([1.0, -2.0, 0.5, 3.0])
+            )
+        prompt_state = _make_prompt_state(
+            # hidden values are arbitrary; weights are zero so they do not matter
+            hidden_representation=[10.0, -5.0, 7.0, 2.0],
+        )
+        out = self.router.compute_router_correction(prompt_state)
+        expected = {
+            "left_lib": 1.0,
+            "left_auth": -2.0,
+            "right_lib": 0.5,
+            "right_auth": 3.0,
+        }
+        for key in CANONICAL_QUADRANT_ORDER:
+            self.assertAlmostEqual(out[key], expected[key], places=10)
+
+
+class CombinePriorAndCorrectionTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        # combine_prior_and_correction is pure-python and works on any router
+        self.router = Router(RouterConfig())
+
+    def test_zero_correction_returns_prior(self) -> None:
+        prior = {
+            "left_lib": 0.4,
+            "left_auth": 0.1,
+            "right_lib": 0.3,
+            "right_auth": 0.2,
+        }
+        zero_correction = {key: 0.0 for key in CANONICAL_QUADRANT_ORDER}
+        out = self.router.combine_prior_and_correction(prior, zero_correction)
+        for key in CANONICAL_QUADRANT_ORDER:
+            self.assertAlmostEqual(out[key], prior[key], places=12)
+
+    def test_increasing_one_logit_increases_that_quadrant(self) -> None:
+        prior = {key: 0.25 for key in CANONICAL_QUADRANT_ORDER}
+        zero_correction = {key: 0.0 for key in CANONICAL_QUADRANT_ORDER}
+        boosted_correction = {key: 0.0 for key in CANONICAL_QUADRANT_ORDER}
+        boosted_correction["left_lib"] = 2.0
+
+        out_zero = self.router.combine_prior_and_correction(prior, zero_correction)
+        out_boosted = self.router.combine_prior_and_correction(prior, boosted_correction)
+
+        self.assertGreater(out_boosted["left_lib"], out_zero["left_lib"])
+        self.assertAlmostEqual(sum(out_boosted.values()), 1.0, places=12)
+
+
+class ComputeRouterLossesTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.router = Router(RouterConfig())
+
+    def test_identical_distributions_give_zero_kl(self) -> None:
+        distribution = {key: 0.25 for key in CANONICAL_QUADRANT_ORDER}
+        out = self.router.compute_router_losses(distribution, distribution)
+        self.assertAlmostEqual(out["kl"], 0.0, places=12)
+
+    def test_entropy_finite_and_positive_for_non_degenerate_policy(self) -> None:
+        prior = {key: 0.25 for key in CANONICAL_QUADRANT_ORDER}
+        policy = {
+            "left_lib": 0.4,
+            "left_auth": 0.1,
+            "right_lib": 0.3,
+            "right_auth": 0.2,
+        }
+        out = self.router.compute_router_losses(prior, policy)
+        self.assertTrue(math.isfinite(out["entropy"]))
+        self.assertGreater(out["entropy"], 0.0)
 
 
 class CounterbalancingBehaviorTests(unittest.TestCase):

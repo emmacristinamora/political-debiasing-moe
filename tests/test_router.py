@@ -32,15 +32,6 @@ CANONICAL_QUADRANT_ORDER = moce_components.CANONICAL_QUADRANT_ORDER
 
 # === HELPERS ===
 
-def _make_router(config: RouterConfig) -> Router:
-    # Router.__init__ is not yet implemented in production code; instantiate
-    # without running __init__ and set config directly so tests can exercise
-    # the implemented helpers and route().
-    router = object.__new__(Router)
-    router.config = config
-    return router
-
-
 def _make_prompt_state(
     quadrant_scores: dict[str, float] | None = None,
     bias_magnitude: Any = 0.5,
@@ -65,7 +56,7 @@ def _make_prompt_state(
 class ValidationFailureTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.router = _make_router(RouterConfig())
+        self.router = Router(RouterConfig())
 
     def test_missing_quadrant_key_raises(self) -> None:
         scores = {key: 0.1 for key in CANONICAL_QUADRANT_ORDER}
@@ -129,7 +120,7 @@ class OrderedScoreExtractionTests(unittest.TestCase):
             "left_auth": 2.0,
         }
         prompt_state = _make_prompt_state(quadrant_scores=scrambled)
-        router = _make_router(RouterConfig())
+        router = Router(RouterConfig())
         ordered = router._extract_ordered_quadrant_scores(prompt_state)
         self.assertEqual(ordered, [1.0, 2.0, 3.0, 4.0])
 
@@ -137,7 +128,7 @@ class OrderedScoreExtractionTests(unittest.TestCase):
 class SoftmaxInvariantTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.router = _make_router(RouterConfig())
+        self.router = Router(RouterConfig())
 
     def test_length_preserved(self) -> None:
         out = self.router._softmax([0.1, 0.2, 0.3, 0.4])
@@ -162,7 +153,7 @@ class SoftmaxInvariantTests(unittest.TestCase):
 class CenterFallbackTests(unittest.TestCase):
 
     def test_fallback_when_below_threshold_and_gate_on(self) -> None:
-        router = _make_router(RouterConfig(
+        router = Router(RouterConfig(
             fallback_to_uniform_if_centered=True,
             center_threshold=0.1,
         ))
@@ -178,7 +169,7 @@ class CenterFallbackTests(unittest.TestCase):
             "right_lib": 0.0,
             "right_auth": 1.0,
         }
-        router = _make_router(RouterConfig(
+        router = Router(RouterConfig(
             fallback_to_uniform_if_centered=False,
             center_threshold=0.1,
             beta=1.0,
@@ -191,7 +182,7 @@ class CenterFallbackTests(unittest.TestCase):
         self.assertLess(prior["right_auth"], 0.25)
 
     def test_strict_inequality_at_threshold(self) -> None:
-        router = _make_router(RouterConfig(
+        router = Router(RouterConfig(
             fallback_to_uniform_if_centered=True,
             center_threshold=0.1,
         ))
@@ -203,7 +194,7 @@ class CenterFallbackTests(unittest.TestCase):
 class HeuristicPriorTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.router = _make_router(RouterConfig(
+        self.router = Router(RouterConfig(
             fallback_to_uniform_if_centered=False,
             beta=1.0,
             temperature=1.0,
@@ -255,7 +246,7 @@ class HeuristicPriorTests(unittest.TestCase):
 class RouteOutputContractTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.router = _make_router(RouterConfig(
+        self.router = Router(RouterConfig(
             fallback_to_uniform_if_centered=False,
             beta=1.0,
             temperature=1.0,
@@ -310,7 +301,7 @@ class RouteOutputContractTests(unittest.TestCase):
 class CalibratedModeTests(unittest.TestCase):
 
     def test_calibrated_mode_raises_not_implemented(self) -> None:
-        router = _make_router(RouterConfig(use_calibrated_router=True))
+        router = Router(RouterConfig(use_calibrated_router=True))
         prompt_state = _make_prompt_state()
         with self.assertRaises(NotImplementedError):
             router.route(prompt_state)

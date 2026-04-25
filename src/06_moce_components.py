@@ -416,7 +416,7 @@ class Router:
 
     def __init__(self, config: RouterConfig) -> None:
         # store router hyperparameters; no calibration module is instantiated in heuristic v1
-        raise NotImplementedError
+        self.config = config
 
     def _validate_prompt_state(self, prompt_state: PromptState) -> None:
         """

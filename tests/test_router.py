@@ -307,6 +307,111 @@ class CalibratedModeTests(unittest.TestCase):
             router.route(prompt_state)
 
 
+class CounterbalancingBehaviorTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.config = RouterConfig(
+            fallback_to_uniform_if_centered=False,
+            beta=1.0,
+            temperature=1.0,
+        )
+
+    def test_most_aligned_gets_least_probability(self) -> None:
+        scores = {
+            "left_lib": -1.5,
+            "left_auth": 0.0,
+            "right_lib": 0.0,
+            "right_auth": 1.5,
+        }
+        router = Router(self.config)
+        prompt_state = _make_prompt_state(quadrant_scores=scores)
+        prior = router.build_heuristic_prior(prompt_state)
+        smallest_key = min(prior, key=prior.get)
+        largest_key = max(prior, key=prior.get)
+        self.assertEqual(smallest_key, "right_auth")
+        self.assertEqual(largest_key, "left_lib")
+
+    def test_equal_scores_produce_equal_probabilities(self) -> None:
+        scores = {key: 0.7 for key in CANONICAL_QUADRANT_ORDER}
+        router = Router(self.config)
+        # bias_magnitude well above center_threshold and the fallback gate is
+        # off, so the softmax path runs (not the uniform-fallback shortcut).
+        prompt_state = _make_prompt_state(quadrant_scores=scores, bias_magnitude=1.0)
+        prior = router.build_heuristic_prior(prompt_state)
+        for key in CANONICAL_QUADRANT_ORDER:
+            self.assertAlmostEqual(prior[key], 0.25, places=12)
+
+    def test_stronger_alignment_lowers_probability_monotonically(self) -> None:
+        scores_moderate = {
+            "left_lib": -0.2,
+            "left_auth": 0.0,
+            "right_lib": 0.0,
+            "right_auth": 0.5,
+        }
+        scores_strong = {
+            "left_lib": -0.2,
+            "left_auth": 0.0,
+            "right_lib": 0.0,
+            "right_auth": 1.5,
+        }
+        router = Router(self.config)
+        prior_moderate = router.build_heuristic_prior(
+            _make_prompt_state(quadrant_scores=scores_moderate)
+        )
+        prior_strong = router.build_heuristic_prior(
+            _make_prompt_state(quadrant_scores=scores_strong)
+        )
+        self.assertLess(prior_strong["right_auth"], prior_moderate["right_auth"])
+
+    def test_higher_beta_sharpens_counterbalancing(self) -> None:
+        scores = {
+            "left_lib": -1.0,
+            "left_auth": 0.0,
+            "right_lib": 0.0,
+            "right_auth": 1.0,
+        }
+        prompt_state = _make_prompt_state(quadrant_scores=scores)
+        low_beta_router = Router(RouterConfig(
+            fallback_to_uniform_if_centered=False,
+            beta=0.5,
+            temperature=1.0,
+        ))
+        high_beta_router = Router(RouterConfig(
+            fallback_to_uniform_if_centered=False,
+            beta=2.0,
+            temperature=1.0,
+        ))
+        prior_low = low_beta_router.build_heuristic_prior(prompt_state)
+        prior_high = high_beta_router.build_heuristic_prior(prompt_state)
+        gap_low = prior_low["left_lib"] - prior_low["right_auth"]
+        gap_high = prior_high["left_lib"] - prior_high["right_auth"]
+        self.assertGreater(gap_high, gap_low)
+
+    def test_higher_temperature_softens_counterbalancing(self) -> None:
+        scores = {
+            "left_lib": -1.0,
+            "left_auth": 0.0,
+            "right_lib": 0.0,
+            "right_auth": 1.0,
+        }
+        prompt_state = _make_prompt_state(quadrant_scores=scores)
+        cold_router = Router(RouterConfig(
+            fallback_to_uniform_if_centered=False,
+            beta=1.0,
+            temperature=0.5,
+        ))
+        warm_router = Router(RouterConfig(
+            fallback_to_uniform_if_centered=False,
+            beta=1.0,
+            temperature=2.0,
+        ))
+        prior_cold = cold_router.build_heuristic_prior(prompt_state)
+        prior_warm = warm_router.build_heuristic_prior(prompt_state)
+        gap_cold = prior_cold["left_lib"] - prior_cold["right_auth"]
+        gap_warm = prior_warm["left_lib"] - prior_warm["right_auth"]
+        self.assertLess(gap_warm, gap_cold)
+
+
 # === MAIN ===
 
 if __name__ == "__main__":

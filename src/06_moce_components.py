@@ -627,7 +627,28 @@ class Router:
         v1:
         - when use_calibrated_router is False, calibrated_policy must match heuristic_prior
         """
-        raise NotImplementedError
+        self._validate_prompt_state(prompt_state)
+        heuristic_prior = self.build_heuristic_prior(prompt_state)
+
+        if self.config.use_calibrated_router:
+            raise NotImplementedError(
+                "calibrated routing is not implemented in heuristic v1; "
+                "set RouterConfig.use_calibrated_router=False"
+            )
+
+        diagnostics = {
+            "beta": self.config.beta,
+            "temperature": self.config.temperature,
+            "used_center_fallback": self._should_use_center_fallback(prompt_state),
+            "quadrant_scores": dict(prompt_state.quadrant_scores),
+        }
+        calibrated_policy = dict(heuristic_prior)
+        return RouterState(
+            heuristic_prior=heuristic_prior,
+            calibrated_policy=calibrated_policy,
+            diagnostics=diagnostics,
+            losses={},
+        )
 
 
 # === EXPERT MANAGER ===

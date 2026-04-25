@@ -63,6 +63,14 @@ class RouterConfig:
     - pi is the calibrated router policy defined around pi_0
     - KL anchoring should keep learned routing near the intended debias geometry
 
+    use_calibrated_router semantics:
+    - False -> heuristic-only routing (current v1 behavior); Router emits
+      pi = pi_0 and does not require a calibration module
+    - True  -> calibrated routing; Router emits pi = softmax(log(pi_0) + delta(h)).
+      This mode requires a loaded calibration module. If the flag is True
+      but no valid module is available, Router must fail loudly rather than
+      silently fall back to the heuristic prior.
+
     Notes:
     - v1 is heuristic-only; only beta, temperature, fallback_to_uniform_if_centered,
       and center_threshold are active
@@ -192,10 +200,16 @@ class RouterState:
     Router output contract:
     - heuristic_prior: normalized distribution over CANONICAL_QUADRANT_ORDER, sums to 1
     - calibrated_policy: normalized distribution over the same key set;
-      equals heuristic_prior in heuristic-only mode
+      in heuristic-only mode it equals heuristic_prior exactly;
+      in calibrated mode it equals softmax(log(pi_0) + delta(h)), where
+      delta(h) is produced by the loaded calibration module from
+      PromptState.hidden_representation. When delta(h) is zero
+      elementwise, calibrated_policy collapses back to heuristic_prior.
     - diagnostics: trace data keyed by "beta", "temperature",
       "used_center_fallback", "quadrant_scores" (copy), "heuristic_prior" (copy)
-    - losses: empty dict in heuristic-only mode
+    - losses: empty dict in heuristic-only mode; in calibrated mode it
+      may carry router regularization terms (KL anchor, entropy) for
+      reporting only -- Router does not optimize them at inference time
 
     Notes:
     - downstream editor consumes this object directly
@@ -390,15 +404,72 @@ class Router:
     - consumes precomputed prompt geometry from PromptState; never runs a
       model forward pass
 
+    Calibrated routing (definition; not yet implemented):
+    - pi_0     : heuristic prior built from quadrant scores (v1 logic)
+    - delta(h) : learned correction logits derived from the prompt's
+                 hidden representation
+    - pi       : final calibrated policy
+    - formula  : pi = softmax(log(pi_0) + delta(h))
+    - semantics: calibrated routing does NOT replace the heuristic prior;
+                 it modifies it additively in log-space.
+
+    Calibration module (interface; not yet implemented):
+    - a learned correction module is owned by Router (not by an external
+      component) and lives inside this class
+    - input  : PromptState.hidden_representation
+    - output : 4 logits aligned exactly with CANONICAL_QUADRANT_ORDER;
+               no alternative ordering is permitted at any boundary
+    - architecture (linear vs MLP) is intentionally left abstract here;
+      it is a single learned mapping h -> R^4
+
+    Runtime behavior (use_calibrated_router):
+    - False : heuristic-only routing; pi = pi_0; calibrated_policy mirrors
+              heuristic_prior; no correction module is required or loaded
+    - True  : calibrated routing; pi = softmax(log(pi_0) + delta(h));
+              requires a loaded calibration module. If enabled without a
+              valid module, Router must fail loudly (not silently fall back
+              to the heuristic prior).
+
+    Artifact boundary:
+    - calibration weights are persisted separately from the base model and
+      from the heuristic configuration; they are loaded at runtime only
+      when calibrated mode is enabled.
+    - a calibration checkpoint contains:
+        - the learned correction module weights
+        - minimal metadata (e.g., input dimension, canonical ordering)
+          sufficient to validate that the module matches
+          CANONICAL_QUADRANT_ORDER and PromptState.hidden_representation
+          at load time
+    - exact file paths and serialization formats are out of scope here.
+
+    Training vs inference separation:
+    - training of the calibrated router lives in a separate script and is
+      out of scope for Router. Router is responsible only for inference:
+      producing delta(h), combining it with pi_0, and reporting losses
+      for diagnostics.
+    - compute_router_losses returns regularization terms (KL anchor,
+      entropy) for inspection only; no optimization happens inside Router.
+
     Input contract:
     - treat prompt_state.quadrant_scores as authoritative input geometry
     - do not recompute quadrants from economic_score / social_score
     - do not use prompt_text for routing
+    - in calibrated mode, prompt_state.hidden_representation is the sole
+      input to the correction module
 
     Output contract:
     - policies are normalized dicts keyed by CANONICAL_QUADRANT_ORDER
     - iterate CANONICAL_QUADRANT_ORDER when converting to/from ordered logits
     - key set stays aligned with ExpertConfig / ExpertManager naming
+
+    Invariants:
+    - if delta(h) is zero elementwise, calibrated policy equals the
+      heuristic prior exactly: pi == pi_0
+    - the output is always a valid probability distribution over the four
+      quadrants (non-negative entries that sum to 1)
+    - canonical quadrant ordering is preserved end-to-end, from
+      PromptState.quadrant_scores through delta(h) logits to the keys of
+      the final pi dict
 
     Important:
     - prompts near a quadrant downweight that quadrant and upweight the

@@ -634,6 +634,7 @@ class Router:
             # can introspect them uniformly without branching on the flag
             self.calibration_module: nn.Module | None = None
             self.calibration_input_dim: int | None = None
+            self.calibration_checkpoint_metadata: dict[str, Any] | None = None
             return
 
         # calibrated mode: router_hidden_dim is reinterpreted here as the
@@ -657,6 +658,9 @@ class Router:
             router_hidden_dim,
             len(CANONICAL_QUADRANT_ORDER),
         )
+        # populated by load_calibration_checkpoint(); None until a checkpoint
+        # is loaded, even in calibrated mode
+        self.calibration_checkpoint_metadata: dict[str, Any] | None = None
 
     def _validate_prompt_state(self, prompt_state: PromptState) -> None:
         """
@@ -1065,6 +1069,104 @@ class Router:
             entropy += -pi_i * log_pi_i
 
         return {"kl": float(kl), "entropy": float(entropy)}
+
+    def _validate_calibration_checkpoint_metadata(
+        self,
+        checkpoint: Any,
+        checkpoint_path: Path,
+    ) -> None:
+        """
+        Fail-fast validation of a loaded calibration checkpoint.
+
+        Logic:
+        - the checkpoint payload must be a dict
+        - required keys: state_dict, router_hidden_dim, canonical_quadrant_order
+        - router_hidden_dim must equal self.calibration_input_dim
+        - canonical_quadrant_order must equal CANONICAL_QUADRANT_ORDER exactly
+          (as a tuple, in canonical order)
+
+        Raises:
+        - ValueError naming the missing key or the mismatched field
+        """
+        if not isinstance(checkpoint, dict):
+            raise ValueError(
+                f"calibration checkpoint at {checkpoint_path} must be a dict, "
+                f"got {type(checkpoint).__name__}"
+            )
+        for key in ("state_dict", "router_hidden_dim", "canonical_quadrant_order"):
+            if key not in checkpoint:
+                raise ValueError(
+                    f"calibration checkpoint at {checkpoint_path} is missing "
+                    f"required key {key!r}"
+                )
+
+        ckpt_dim = checkpoint["router_hidden_dim"]
+        if ckpt_dim != self.calibration_input_dim:
+            raise ValueError(
+                f"calibration checkpoint at {checkpoint_path} declares "
+                f"router_hidden_dim={ckpt_dim}, but this router was constructed "
+                f"with calibration_input_dim={self.calibration_input_dim}"
+            )
+
+        ckpt_order = tuple(checkpoint["canonical_quadrant_order"])
+        if ckpt_order != CANONICAL_QUADRANT_ORDER:
+            raise ValueError(
+                f"calibration checkpoint at {checkpoint_path} canonical_quadrant_order "
+                f"{list(ckpt_order)} does not match CANONICAL_QUADRANT_ORDER "
+                f"{list(CANONICAL_QUADRANT_ORDER)}"
+            )
+
+    def load_calibration_checkpoint(self, checkpoint_path: Path) -> None:
+        """
+        Load a trained calibration head checkpoint into self.calibration_module.
+
+        Logic:
+        - precondition: the router was constructed in calibrated mode
+          (self.calibration_module is not None); raises ValueError otherwise.
+          this method does not silently initialize a calibration module.
+        - reads the checkpoint via torch.load on the given path
+        - validates state_dict, router_hidden_dim, and canonical_quadrant_order
+          via _validate_calibration_checkpoint_metadata
+        - calls calibration_module.load_state_dict(checkpoint["state_dict"])
+        - records minimal traceability in self.calibration_checkpoint_metadata
+
+        Args:
+        - checkpoint_path: pathlib.Path to a .pt file produced by
+          src/train_calibrated_router.py
+
+        Raises:
+        - ValueError if the router is in heuristic mode, the checkpoint is
+          malformed, or its metadata does not match the router's configuration
+        - FileNotFoundError if checkpoint_path does not exist
+        """
+        if self.calibration_module is None:
+            raise ValueError(
+                "load_calibration_checkpoint requires a calibration module; "
+                "this router was constructed with use_calibrated_router=False"
+            )
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(
+                f"calibration checkpoint not found: {checkpoint_path}"
+            )
+
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location="cpu",
+            weights_only=False,
+        )
+        self._validate_calibration_checkpoint_metadata(checkpoint, checkpoint_path)
+        self.calibration_module.load_state_dict(checkpoint["state_dict"])
+
+        metadata: dict[str, Any] = {
+            "checkpoint_path": str(checkpoint_path),
+            "router_hidden_dim": checkpoint["router_hidden_dim"],
+            "canonical_quadrant_order": list(checkpoint["canonical_quadrant_order"]),
+        }
+        if "beta" in checkpoint:
+            metadata["beta"] = checkpoint["beta"]
+        if "temperature" in checkpoint:
+            metadata["temperature"] = checkpoint["temperature"]
+        self.calibration_checkpoint_metadata = metadata
 
     def route(self, prompt_state: PromptState) -> RouterState:
         """

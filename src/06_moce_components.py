@@ -544,7 +544,23 @@ class Router:
         v1:
         - this is the active routing path
         """
-        raise NotImplementedError
+        if self._should_use_center_fallback(prompt_state):
+            uniform_weight = 1.0 / len(CANONICAL_QUADRANT_ORDER)
+            return {key: uniform_weight for key in CANONICAL_QUADRANT_ORDER}
+
+        if self.config.temperature == 0:
+            raise ValueError(
+                "RouterConfig.temperature must be non-zero for heuristic prior; "
+                f"got {self.config.temperature}"
+            )
+
+        ordered_scores = self._extract_ordered_quadrant_scores(prompt_state)
+        logits = [
+            -self.config.beta * score / self.config.temperature
+            for score in ordered_scores
+        ]
+        probabilities = self._softmax(logits)
+        return {key: prob for key, prob in zip(CANONICAL_QUADRANT_ORDER, probabilities)}
 
     def compute_router_correction(self, prompt_state: PromptState) -> dict[str, float]:
         """

@@ -518,6 +518,20 @@ class Router:
         total = sum(shifted_exps)
         return [exp_value / total for exp_value in shifted_exps]
 
+    def _should_use_center_fallback(self, prompt_state: PromptState) -> bool:
+        """
+        Decide whether to fall back to a uniform prior for near-center prompts.
+
+        Logic:
+        - validate inputs via _validate_prompt_state
+        - return True only when the gate is enabled and bias_magnitude
+          is strictly below the configured center_threshold
+        """
+        self._validate_prompt_state(prompt_state)
+        if not self.config.fallback_to_uniform_if_centered:
+            return False
+        return prompt_state.bias_magnitude < self.config.center_threshold
+
     def build_heuristic_prior(self, prompt_state: PromptState) -> dict[str, float]:
         """
         Build heuristic prior pi_0 from quadrant alignment scores.

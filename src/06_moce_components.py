@@ -193,12 +193,11 @@ class RouterState:
     - heuristic_prior: normalized distribution over CANONICAL_QUADRANT_ORDER, sums to 1
     - calibrated_policy: normalized distribution over the same key set;
       equals heuristic_prior in heuristic-only mode
-    - diagnostics: non-essential trace data, e.g. raw quadrant_scores,
-      whether center fallback was used, optional pre-softmax logits
-    - losses: may be empty in heuristic-only inference mode
+    - diagnostics: trace data keyed by "beta", "temperature",
+      "used_center_fallback", "quadrant_scores" (copy), "heuristic_prior" (copy)
+    - losses: empty dict in heuristic-only mode
 
     Notes:
-    - heuristic_prior is always populated
     - downstream editor consumes this object directly
     - when serializing to an ordered vector, iterate CANONICAL_QUADRANT_ORDER
     """
@@ -382,36 +381,30 @@ class Router:
     """
     Compute initial expert routing for debiasing.
 
-    Logic:
-    - build a heuristic prior pi_0 from quadrant alignment scores
-    - optionally apply a lightweight calibrated correction around log(pi_0)
-    - expose KL and entropy terms for router training
-
     Scope (v1):
-    - heuristic-only: deterministic pi_0, no learned calibration,
-      no router training loop, no task/KL/entropy optimization
-    - calibrated methods remain part of the interface but are inactive
-      until a future extension enables them
-    - consumes precomputed prompt geometry from PromptState; does not
-      run any model forward pass
+    - heuristic-only: deterministic pi_0 = softmax(-beta * q / temperature),
+      with optional uniform fallback for near-center prompts
+    - calibrated methods (compute_router_correction, combine_prior_and_correction,
+      compute_router_losses) are part of the interface but unimplemented;
+      route() raises NotImplementedError when use_calibrated_router=True
+    - consumes precomputed prompt geometry from PromptState; never runs a
+      model forward pass
 
     Input contract:
     - treat prompt_state.quadrant_scores as authoritative input geometry
-    - do not recompute quadrant scores from economic_score / social_score
-    - do not use prompt_text for heuristic routing
-    - do not perform any model forward pass
+    - do not recompute quadrants from economic_score / social_score
+    - do not use prompt_text for routing
 
     Output contract:
     - policies are normalized dicts keyed by CANONICAL_QUADRANT_ORDER
-    - use CANONICAL_QUADRANT_ORDER whenever converting to/from ordered logits
-      or probability vectors (softmax inputs/outputs, diagnostics)
-    - these keys must stay aligned with ExpertConfig / ExpertManager naming
+    - iterate CANONICAL_QUADRANT_ORDER when converting to/from ordered logits
+    - key set stays aligned with ExpertConfig / ExpertManager naming
 
     Important:
-    - prompts near a quadrant should downweight that quadrant and upweight
-      opposite or adjacent quadrant
-    - the calibrated router should not learn a free policy from scratch;
-      it should learn a small correction around the heuristic prior
+    - prompts near a quadrant downweight that quadrant and upweight the
+      opposite and adjacent quadrants
+    - the calibrated router, when implemented, learns a small correction
+      around the heuristic prior, not a free policy from scratch
     """
 
     def __init__(self, config: RouterConfig) -> None:
@@ -537,12 +530,12 @@ class Router:
         Build heuristic prior pi_0 from quadrant alignment scores.
 
         Logic:
-        - use counterbalancing geometry rather than same-direction amplification
-        - high alignment with one quadrant should penalize that quadrant in pi_0
-        - prompts near the center may optionally fall back to a uniform prior
+        - if the prompt is near center, return a uniform prior
+        - otherwise compute pi_0 = softmax(-beta * q / temperature) over
+          CANONICAL_QUADRANT_ORDER
 
-        v1:
-        - this is the active routing path
+        Raises:
+        - ValueError if RouterConfig.temperature == 0
         """
         if self._should_use_center_fallback(prompt_state):
             uniform_weight = 1.0 / len(CANONICAL_QUADRANT_ORDER)
@@ -564,14 +557,11 @@ class Router:
 
     def compute_router_correction(self, prompt_state: PromptState) -> dict[str, float]:
         """
-        Compute lightweight calibrated correction around log(pi_0).
+        Compute the calibrated correction delta(h) around log(pi_0).
 
         Notes:
-        - in heuristic-only mode this can return zeros or be skipped
-        - this is the delta(h) term from the original routing plan
-
-        v1:
-        - inactive; returns zeros (or is not invoked) because use_calibrated_router is False
+        - returns per-quadrant logits when calibrated mode is enabled
+        - not implemented in v1 (heuristic-only)
         """
         raise NotImplementedError
 
@@ -584,12 +574,10 @@ class Router:
         Combine heuristic prior and correction into calibrated policy pi.
 
         Logic:
-        - compute pi = softmax(log(pi_0) + delta(h))
-        - keep routing behavior close to the intended debiasing geometry
+        - pi = softmax(log(pi_0) + delta(h))
 
-        v1:
-        - only meaningful when calibrated routing is enabled; with zero correction
-          the output matches the heuristic prior
+        Notes:
+        - not implemented in v1; with zero correction pi equals pi_0
         """
         raise NotImplementedError
 
@@ -602,15 +590,11 @@ class Router:
         Compute router regularization losses.
 
         Includes:
-        - KL(pi || pi_0) to anchor learned routing to the debias prior
-        - entropy regularization to prevent collapse or overconfidence
+        - KL(pi || pi_0) anchor to the heuristic prior
+        - entropy regularization
 
         Notes:
-        - these losses may be unused in inference-only mode, but the interface
-          should still expose them for future router training
-
-        v1:
-        - placeholder only; heuristic inference mode does not optimize these losses
+        - not implemented in v1 (heuristic inference does not optimize losses)
         """
         raise NotImplementedError
 
@@ -619,13 +603,14 @@ class Router:
         Full routing pipeline.
 
         Flow:
+        - validate prompt_state
         - build heuristic prior pi_0
-        - optionally compute calibrated policy pi around pi_0
-        - compute diagnostics and optional losses
-        - return RouterState for downstream editing
+        - in heuristic mode, set calibrated_policy = pi_0 and losses = {}
+        - populate diagnostics with: beta, temperature, used_center_fallback,
+          quadrant_scores (copy), heuristic_prior (copy)
 
-        v1:
-        - when use_calibrated_router is False, calibrated_policy must match heuristic_prior
+        Raises:
+        - NotImplementedError if RouterConfig.use_calibrated_router is True
         """
         self._validate_prompt_state(prompt_state)
         heuristic_prior = self.build_heuristic_prior(prompt_state)

@@ -810,6 +810,69 @@ class Router:
             for index, key in enumerate(CANONICAL_QUADRANT_ORDER)
         }
 
+    def _validate_canonical_quadrant_dict(
+        self,
+        distribution: Any,
+        field_name: str,
+        *,
+        require_positive: bool,
+        require_sums_to_one: bool,
+        sum_tolerance: float = 1e-6,
+    ) -> None:
+        """
+        Validate a dict keyed exactly by CANONICAL_QUADRANT_ORDER.
+
+        Logic:
+        - dict-ness, complete and exclusive key set, numeric and finite values
+        - optional strict positivity (required for log-of-prior)
+        - optional sum-to-one within sum_tolerance (required for distributions)
+
+        Raises:
+        - ValueError naming the violated condition; no silent normalization
+        """
+        if not isinstance(distribution, dict):
+            raise ValueError(
+                f"{field_name} must be a dict, got {type(distribution).__name__}"
+            )
+
+        expected_keys = set(CANONICAL_QUADRANT_ORDER)
+        actual_keys = set(distribution.keys())
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
+            raise ValueError(
+                f"{field_name} is missing required keys: {sorted(missing_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+        unexpected_keys = actual_keys - expected_keys
+        if unexpected_keys:
+            raise ValueError(
+                f"{field_name} has unexpected keys: {sorted(unexpected_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+
+        for key in CANONICAL_QUADRANT_ORDER:
+            value = distribution[key]
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"{field_name}[{key!r}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"{field_name}[{key!r}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"{field_name}[{key!r}] is infinite")
+            if require_positive and value <= 0:
+                raise ValueError(
+                    f"{field_name}[{key!r}] must be strictly positive for log; got {value}"
+                )
+
+        if require_sums_to_one:
+            total = sum(float(distribution[key]) for key in CANONICAL_QUADRANT_ORDER)
+            if abs(total - 1.0) > sum_tolerance:
+                raise ValueError(
+                    f"{field_name} must sum to 1 within {sum_tolerance}; got sum={total}"
+                )
+
     def combine_prior_and_correction(
         self,
         heuristic_prior: dict[str, float],
@@ -820,11 +883,38 @@ class Router:
 
         Logic:
         - pi = softmax(log(pi_0) + delta(h))
+        - validate both inputs strictly; no silent repair
+        - read both dicts in CANONICAL_QUADRANT_ORDER, build combined logits,
+          run them through _softmax, and return a canonically-ordered dict
 
-        Notes:
-        - not implemented in v1; with zero correction pi equals pi_0
+        Returns:
+        - dict[str, float] with keys exactly CANONICAL_QUADRANT_ORDER and
+          values in [0, 1] summing to 1 (up to floating-point tolerance)
+
+        Raises:
+        - ValueError if heuristic_prior is not a strictly-positive distribution
+          summing to 1 over CANONICAL_QUADRANT_ORDER, or if correction_logits
+          is not a finite numeric dict over the same key set
         """
-        raise NotImplementedError
+        self._validate_canonical_quadrant_dict(
+            heuristic_prior,
+            "heuristic_prior",
+            require_positive=True,
+            require_sums_to_one=True,
+        )
+        self._validate_canonical_quadrant_dict(
+            correction_logits,
+            "correction_logits",
+            require_positive=False,
+            require_sums_to_one=False,
+        )
+
+        combined_logits = [
+            math.log(float(heuristic_prior[key])) + float(correction_logits[key])
+            for key in CANONICAL_QUADRANT_ORDER
+        ]
+        probabilities = self._softmax(combined_logits)
+        return {key: prob for key, prob in zip(CANONICAL_QUADRANT_ORDER, probabilities)}
 
     def compute_router_losses(
         self,

@@ -411,6 +411,108 @@ class InputTransformer:
         raise NotImplementedError
 
 
+# === CALIBRATED ROUTER TRAINING DATASET SCHEMA ===
+
+# documentation-only schema for the calibration module's training data. this
+# block defines the on-disk artifact format expected by a future standalone
+# training script; no loader, validator, or trainer is implemented in this
+# module. inference-time routing does not depend on this schema.
+#
+# recommended artifact layout
+# ---------------------------
+# a calibrated-router dataset is split across two kinds of files in the same
+# directory:
+#
+#   1. records.jsonl  -- one JSON object per training example; lightweight
+#                        structured fields only, no raw dense vectors
+#   2. hidden.pt      -- a torch tensor artifact holding the dense hidden
+#                        representations referenced from records.jsonl;
+#                        recommended shape [num_examples, hidden_dim] with
+#                        dtype float32. exact filename and tensor format are
+#                        writer-defined; .pt is the recommended default.
+#
+# the split keeps JSONL small, human-readable, and grep-able, while heavy
+# float vectors live in a compact binary artifact. JSONL stores references;
+# tensor files store the actual feature vectors. inlining dense vectors in
+# JSONL is explicitly NOT supported.
+#
+# per-example record schema (one line in records.jsonl)
+# -----------------------------------------------------
+#   example_id:                 str
+#       stable unique id for the example. used for deduplication and to
+#       cross-reference logs and downstream evaluations.
+#
+#   prompt_text:                str
+#       original prompt text. carried for traceability; not consumed as a
+#       training feature.
+#
+#   quadrant_scores:            dict[str, float]
+#       prompt-side alignment scores feeding the heuristic prior. keys must
+#       be exactly CANONICAL_QUADRANT_ORDER (any insertion order); values
+#       must be finite floats. these are the same scores the heuristic
+#       router consumes at inference time.
+#
+#   bias_magnitude:             float
+#       distance from political center in compass space; finite scalar.
+#       used by the heuristic prior's center-fallback gate.
+#
+#   target_policy:              dict[str, float]
+#       supervision signal: the desired calibrated policy for this example.
+#       keys must be exactly CANONICAL_QUADRANT_ORDER. values must form a
+#       valid probability distribution: strictly positive and summing to 1
+#       within floating-point tolerance. how target_policy is produced
+#       (counterbalancing rule, teacher model, hand-curated, etc.) is out
+#       of scope for this schema.
+#
+#   hidden_representation_ref:  str
+#       pointer to the dense feature vector for this example. resolution is
+#       deterministic and writer-defined; the recommended form is
+#       "<filename>:<row_index>" (e.g. "hidden.pt:42"), referencing a row in
+#       a 2D tensor of shape [num_examples, hidden_dim]. the referenced
+#       vector must come from the same base model, layer (or layer
+#       aggregation), and token-pooling strategy used both for steering-
+#       vector extraction and for runtime calibrated routing -- this is the
+#       same activation-space contract documented on
+#       PromptState.hidden_representation.
+#
+#   metadata:                   dict[str, Any]   (optional; default {})
+#       free-form provenance fields (source corpus id, generation timestamp,
+#       teacher model version, etc.). not consumed by the trainer; kept for
+#       reproducibility only.
+#
+# per-example validation expectations (to be enforced by the training script)
+# ---------------------------------------------------------------------------
+#   - all required fields are present and have the declared types
+#   - quadrant_scores keys are exactly CANONICAL_QUADRANT_ORDER and values
+#     are finite floats
+#   - target_policy keys are exactly CANONICAL_QUADRANT_ORDER, values are
+#     finite, strictly positive, and sum to 1 within ~1e-6
+#   - bias_magnitude is a finite float
+#   - hidden_representation_ref resolves to an existing 1D vector in the
+#     associated tensor artifact (no missing rows, no broken pointers)
+#   - the resolved hidden vector's length equals the calibration module's
+#     declared input dimension (RouterConfig.router_hidden_dim used at
+#     inference time); a mismatch is a hard error, not a silent reshape,
+#     pad, or truncation -- mirrors the runtime contract enforced by
+#     Router._prepare_hidden_representation
+#
+# out of scope for this schema
+# ----------------------------
+# these are deliberately NOT part of a training record:
+#   - expert hidden-state outputs or expert-generated text
+#   - editor traces, weight updates, or mixture alignments
+#   - MoCEEngine final generated text
+#   - per-example training losses (computed at training time, not stored)
+#   - inline raw dense vectors in JSONL (always go through
+#     hidden_representation_ref)
+#
+# practical scope
+# ---------------
+# one clean format is sufficient for v1. no competing schemas, no nested
+# task formats, no versioning framework, no sharding rules. add complexity
+# only when an actual requirement emerges.
+
+
 # === ROUTER ===
 
 class Router:

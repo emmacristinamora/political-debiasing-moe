@@ -910,7 +910,7 @@ class MoCEEngine:
         # Router builds pi_0 and optional calibrated policy pi
         # ExpertManager runs the four quadrant specialists
         # Editor recursively fuses expert outputs into the final answer
-        raise NotImplementedError
+        self.router = Router(router_config)
 
     def run(self, prompt_text: str) -> MoCEResult:
         """

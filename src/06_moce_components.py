@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
 
+import torch
 from torch import nn
 
 
@@ -699,24 +700,115 @@ class Router:
         probabilities = self._softmax(logits)
         return {key: prob for key, prob in zip(CANONICAL_QUADRANT_ORDER, probabilities)}
 
+    def _prepare_hidden_representation(self, hidden_representation: Any) -> torch.Tensor:
+        """
+        Validate hidden_representation and return a 1D float32 tensor.
+
+        Logic:
+        - presence: must not be None
+        - type:     accept torch.Tensor, list, or tuple of numeric scalars
+        - shape:    must be 1D with length == self.calibration_input_dim
+        - values:   all entries must be finite (no NaN, no inf)
+
+        Returns:
+        - torch.Tensor of dtype float32 and shape [calibration_input_dim]
+
+        Raises:
+        - ValueError naming the violated condition; no silent coercion of
+          shape, dtype, or value
+        """
+        if hidden_representation is None:
+            raise ValueError(
+                "PromptState.hidden_representation is None; "
+                "calibrated routing requires a 1D numeric vector"
+            )
+
+        expected_dim = self.calibration_input_dim
+
+        if isinstance(hidden_representation, torch.Tensor):
+            if hidden_representation.dim() != 1:
+                raise ValueError(
+                    "PromptState.hidden_representation must be a 1D tensor; "
+                    f"got shape {tuple(hidden_representation.shape)}"
+                )
+            if hidden_representation.shape[0] != expected_dim:
+                raise ValueError(
+                    f"PromptState.hidden_representation length {hidden_representation.shape[0]} "
+                    f"does not match calibration_input_dim {expected_dim}"
+                )
+            tensor = hidden_representation.to(dtype=torch.float32)
+            if not torch.isfinite(tensor).all().item():
+                raise ValueError(
+                    "PromptState.hidden_representation contains NaN or inf entries"
+                )
+            return tensor
+
+        if isinstance(hidden_representation, (list, tuple)):
+            for index, value in enumerate(hidden_representation):
+                if not isinstance(value, (int, float)):
+                    raise ValueError(
+                        f"PromptState.hidden_representation[{index}] must be int or float, "
+                        f"got {type(value).__name__}"
+                    )
+                if math.isnan(value):
+                    raise ValueError(
+                        f"PromptState.hidden_representation[{index}] is NaN"
+                    )
+                if math.isinf(value):
+                    raise ValueError(
+                        f"PromptState.hidden_representation[{index}] is infinite"
+                    )
+            if len(hidden_representation) != expected_dim:
+                raise ValueError(
+                    f"PromptState.hidden_representation length {len(hidden_representation)} "
+                    f"does not match calibration_input_dim {expected_dim}"
+                )
+            return torch.tensor(hidden_representation, dtype=torch.float32)
+
+        raise ValueError(
+            "PromptState.hidden_representation must be a torch.Tensor, list, or tuple "
+            f"of numeric scalars; got {type(hidden_representation).__name__}"
+        )
+
     def compute_router_correction(self, prompt_state: PromptState) -> dict[str, float]:
         """
         Compute the calibrated correction delta(h) around log(pi_0).
 
-        Notes:
-        - returns per-quadrant logits when calibrated mode is enabled
-        - not implemented in v1 (heuristic-only)
+        Logic:
+        - require an initialized calibration module
+        - validate and convert prompt_state.hidden_representation to a 1D
+          float32 tensor of length self.calibration_input_dim
+        - run the calibration module to obtain 4 logits aligned with
+          CANONICAL_QUADRANT_ORDER
 
-        Required validation (when implemented):
-        - prompt_state.hidden_representation must be non-None
-        - it must be a 1D numeric vector with finite entries
-        - its dimension must match the loaded calibration module's
-          declared input dimension
-        - any failure raises ValueError naming the violated condition;
-          no silent reshape, pad, truncation, or fallback to pi_0
-        - returned logits keys must equal CANONICAL_QUADRANT_ORDER
+        Returns:
+        - dict[str, float] mapping each canonical quadrant key to its
+          correction logit (plain Python floats, not tensors)
+
+        Raises:
+        - ValueError if calibrated routing was requested but no calibration
+          module is initialized, or if hidden_representation violates the
+          contract (presence / type / shape / finiteness / dimension)
         """
-        raise NotImplementedError
+        if self.calibration_module is None:
+            raise ValueError(
+                "compute_router_correction requires a calibration module; "
+                "none is initialized (use_calibrated_router=False at construction time)"
+            )
+
+        hidden_tensor = self._prepare_hidden_representation(prompt_state.hidden_representation)
+        logits = self.calibration_module(hidden_tensor)
+
+        if logits.dim() != 1 or logits.shape[0] != len(CANONICAL_QUADRANT_ORDER):
+            raise ValueError(
+                f"calibration module produced logits of shape {tuple(logits.shape)}; "
+                f"expected ({len(CANONICAL_QUADRANT_ORDER)},)"
+            )
+
+        return {
+            key: float(logits[index].item())
+            for index, key in enumerate(CANONICAL_QUADRANT_ORDER)
+        }
 
     def combine_prior_and_correction(
         self,

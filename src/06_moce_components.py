@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
 
+import torch
+from torch import nn
+
 
 # === CANONICAL ORDER ===
 
@@ -62,6 +65,14 @@ class RouterConfig:
     - pi_0 is the counterbalancing prior derived from prompt alignment
     - pi is the calibrated router policy defined around pi_0
     - KL anchoring should keep learned routing near the intended debias geometry
+
+    use_calibrated_router semantics:
+    - False -> heuristic-only routing (current v1 behavior); Router emits
+      pi = pi_0 and does not require a calibration module
+    - True  -> calibrated routing; Router emits pi = softmax(log(pi_0) + delta(h)).
+      This mode requires a loaded calibration module. If the flag is True
+      but no valid module is available, Router must fail loudly rather than
+      silently fall back to the heuristic prior.
 
     Notes:
     - v1 is heuristic-only; only beta, temperature, fallback_to_uniform_if_centered,
@@ -168,6 +179,25 @@ class PromptState:
     - traceability only (not a heuristic routing signal): prompt_text, metadata
 
     quadrant_scores keys: see CANONICAL_QUADRANT_ORDER (module-level constant).
+
+    hidden_representation contract:
+    - heuristic routing does NOT consume hidden_representation; it may be
+      omitted or carried purely for diagnostics in heuristic mode.
+    - calibrated routing (use_calibrated_router=True) REQUIRES it. When
+      required, hidden_representation must be:
+        - a 1D numeric vector with shape [hidden_dim]
+        - finite (no NaN, no inf)
+        - drawn from the same base model, the same layer (or layer
+          aggregation), and the same token-pooling strategy used to
+          extract steering vectors and to train the calibration module
+    - the field is intentionally typed as Any at this step to keep the
+      backbone choice (e.g., torch.Tensor vs np.ndarray) flexible; the
+      contract above is enforced by Router in calibrated mode, not by
+      the dataclass itself.
+    - dimensional consistency: hidden_dim must match the input dimension
+      expected by the loaded calibration module; a mismatch must surface
+      as a runtime error at routing time, not be silently broadcast or
+      truncated.
     """
 
     prompt_text: str
@@ -192,10 +222,16 @@ class RouterState:
     Router output contract:
     - heuristic_prior: normalized distribution over CANONICAL_QUADRANT_ORDER, sums to 1
     - calibrated_policy: normalized distribution over the same key set;
-      equals heuristic_prior in heuristic-only mode
+      in heuristic-only mode it equals heuristic_prior exactly;
+      in calibrated mode it equals softmax(log(pi_0) + delta(h)), where
+      delta(h) is produced by the loaded calibration module from
+      PromptState.hidden_representation. When delta(h) is zero
+      elementwise, calibrated_policy collapses back to heuristic_prior.
     - diagnostics: trace data keyed by "beta", "temperature",
       "used_center_fallback", "quadrant_scores" (copy), "heuristic_prior" (copy)
-    - losses: empty dict in heuristic-only mode
+    - losses: empty dict in heuristic-only mode; in calibrated mode it
+      may carry router regularization terms (KL anchor, entropy) for
+      reporting only -- Router does not optimize them at inference time
 
     Notes:
     - downstream editor consumes this object directly
@@ -375,6 +411,108 @@ class InputTransformer:
         raise NotImplementedError
 
 
+# === CALIBRATED ROUTER TRAINING DATASET SCHEMA ===
+
+# documentation-only schema for the calibration module's training data. this
+# block defines the on-disk artifact format expected by a future standalone
+# training script; no loader, validator, or trainer is implemented in this
+# module. inference-time routing does not depend on this schema.
+#
+# recommended artifact layout
+# ---------------------------
+# a calibrated-router dataset is split across two kinds of files in the same
+# directory:
+#
+#   1. records.jsonl  -- one JSON object per training example; lightweight
+#                        structured fields only, no raw dense vectors
+#   2. hidden.pt      -- a torch tensor artifact holding the dense hidden
+#                        representations referenced from records.jsonl;
+#                        recommended shape [num_examples, hidden_dim] with
+#                        dtype float32. exact filename and tensor format are
+#                        writer-defined; .pt is the recommended default.
+#
+# the split keeps JSONL small, human-readable, and grep-able, while heavy
+# float vectors live in a compact binary artifact. JSONL stores references;
+# tensor files store the actual feature vectors. inlining dense vectors in
+# JSONL is explicitly NOT supported.
+#
+# per-example record schema (one line in records.jsonl)
+# -----------------------------------------------------
+#   example_id:                 str
+#       stable unique id for the example. used for deduplication and to
+#       cross-reference logs and downstream evaluations.
+#
+#   prompt_text:                str
+#       original prompt text. carried for traceability; not consumed as a
+#       training feature.
+#
+#   quadrant_scores:            dict[str, float]
+#       prompt-side alignment scores feeding the heuristic prior. keys must
+#       be exactly CANONICAL_QUADRANT_ORDER (any insertion order); values
+#       must be finite floats. these are the same scores the heuristic
+#       router consumes at inference time.
+#
+#   bias_magnitude:             float
+#       distance from political center in compass space; finite scalar.
+#       used by the heuristic prior's center-fallback gate.
+#
+#   target_policy:              dict[str, float]
+#       supervision signal: the desired calibrated policy for this example.
+#       keys must be exactly CANONICAL_QUADRANT_ORDER. values must form a
+#       valid probability distribution: strictly positive and summing to 1
+#       within floating-point tolerance. how target_policy is produced
+#       (counterbalancing rule, teacher model, hand-curated, etc.) is out
+#       of scope for this schema.
+#
+#   hidden_representation_ref:  str
+#       pointer to the dense feature vector for this example. resolution is
+#       deterministic and writer-defined; the recommended form is
+#       "<filename>:<row_index>" (e.g. "hidden.pt:42"), referencing a row in
+#       a 2D tensor of shape [num_examples, hidden_dim]. the referenced
+#       vector must come from the same base model, layer (or layer
+#       aggregation), and token-pooling strategy used both for steering-
+#       vector extraction and for runtime calibrated routing -- this is the
+#       same activation-space contract documented on
+#       PromptState.hidden_representation.
+#
+#   metadata:                   dict[str, Any]   (optional; default {})
+#       free-form provenance fields (source corpus id, generation timestamp,
+#       teacher model version, etc.). not consumed by the trainer; kept for
+#       reproducibility only.
+#
+# per-example validation expectations (to be enforced by the training script)
+# ---------------------------------------------------------------------------
+#   - all required fields are present and have the declared types
+#   - quadrant_scores keys are exactly CANONICAL_QUADRANT_ORDER and values
+#     are finite floats
+#   - target_policy keys are exactly CANONICAL_QUADRANT_ORDER, values are
+#     finite, strictly positive, and sum to 1 within ~1e-6
+#   - bias_magnitude is a finite float
+#   - hidden_representation_ref resolves to an existing 1D vector in the
+#     associated tensor artifact (no missing rows, no broken pointers)
+#   - the resolved hidden vector's length equals the calibration module's
+#     declared input dimension (RouterConfig.router_hidden_dim used at
+#     inference time); a mismatch is a hard error, not a silent reshape,
+#     pad, or truncation -- mirrors the runtime contract enforced by
+#     Router._prepare_hidden_representation
+#
+# out of scope for this schema
+# ----------------------------
+# these are deliberately NOT part of a training record:
+#   - expert hidden-state outputs or expert-generated text
+#   - editor traces, weight updates, or mixture alignments
+#   - MoCEEngine final generated text
+#   - per-example training losses (computed at training time, not stored)
+#   - inline raw dense vectors in JSONL (always go through
+#     hidden_representation_ref)
+#
+# practical scope
+# ---------------
+# one clean format is sufficient for v1. no competing schemas, no nested
+# task formats, no versioning framework, no sharding rules. add complexity
+# only when an actual requirement emerges.
+
+
 # === ROUTER ===
 
 class Router:
@@ -390,15 +528,95 @@ class Router:
     - consumes precomputed prompt geometry from PromptState; never runs a
       model forward pass
 
+    Calibrated routing (definition; not yet implemented):
+    - pi_0     : heuristic prior built from quadrant scores (v1 logic)
+    - delta(h) : learned correction logits derived from the prompt's
+                 hidden representation
+    - pi       : final calibrated policy
+    - formula  : pi = softmax(log(pi_0) + delta(h))
+    - semantics: calibrated routing does NOT replace the heuristic prior;
+                 it modifies it additively in log-space.
+
+    Calibration module (interface; not yet implemented):
+    - a learned correction module is owned by Router (not by an external
+      component) and lives inside this class
+    - input  : PromptState.hidden_representation
+    - output : 4 logits aligned exactly with CANONICAL_QUADRANT_ORDER;
+               no alternative ordering is permitted at any boundary
+    - architecture (linear vs MLP) is intentionally left abstract here;
+      it is a single learned mapping h -> R^4
+
+    Runtime behavior (use_calibrated_router):
+    - False : heuristic-only routing; pi = pi_0; calibrated_policy mirrors
+              heuristic_prior; no correction module is required or loaded
+    - True  : calibrated routing; pi = softmax(log(pi_0) + delta(h));
+              requires a loaded calibration module. If enabled without a
+              valid module, Router must fail loudly (not silently fall back
+              to the heuristic prior).
+
+    Artifact boundary:
+    - calibration weights are persisted separately from the base model and
+      from the heuristic configuration; they are loaded at runtime only
+      when calibrated mode is enabled.
+    - a calibration checkpoint contains:
+        - the learned correction module weights
+        - minimal metadata (e.g., input dimension, canonical ordering)
+          sufficient to validate that the module matches
+          CANONICAL_QUADRANT_ORDER and PromptState.hidden_representation
+          at load time
+    - exact file paths and serialization formats are out of scope here.
+
+    Training vs inference separation:
+    - training of the calibrated router lives in a separate script and is
+      out of scope for Router. Router is responsible only for inference:
+      producing delta(h), combining it with pi_0, and reporting losses
+      for diagnostics.
+    - compute_router_losses returns regularization terms (KL anchor,
+      entropy) for inspection only; no optimization happens inside Router.
+
     Input contract:
     - treat prompt_state.quadrant_scores as authoritative input geometry
     - do not recompute quadrants from economic_score / social_score
     - do not use prompt_text for routing
+    - in calibrated mode, prompt_state.hidden_representation is the sole
+      input to the correction module
+
+    hidden_representation usage (calibrated mode):
+    - consumed directly by the correction module; Router does not
+      recompute, re-pool, re-normalize, or otherwise transform it
+    - assumed to be produced upstream by InputTransformer and to satisfy
+      the PromptState.hidden_representation contract (1D, numeric, finite,
+      shape [hidden_dim]) drawn from the same model/layer/pooling used
+      during steering-vector extraction and calibration training
+    - dimensional consistency is mandatory: hidden_dim must match the
+      input dimension declared by the loaded calibration module's
+      checkpoint metadata; any mismatch must raise an error at runtime
+      rather than be silently reshaped, padded, or truncated
+
+    Calibrated-mode validation requirement (to be implemented later in
+    compute_router_correction; not implemented in this step):
+    - hidden_representation must be present (not None)
+    - it must be a 1D numeric vector
+    - all entries must be finite (no NaN, no inf)
+    - its dimension must match the calibration module's expected input
+    - any violation must raise ValueError with a precise message
+      identifying the failed condition (presence / shape / finiteness /
+      dimensional mismatch)
+    - heuristic-mode routing must NOT trigger any of these checks
 
     Output contract:
     - policies are normalized dicts keyed by CANONICAL_QUADRANT_ORDER
     - iterate CANONICAL_QUADRANT_ORDER when converting to/from ordered logits
     - key set stays aligned with ExpertConfig / ExpertManager naming
+
+    Invariants:
+    - if delta(h) is zero elementwise, calibrated policy equals the
+      heuristic prior exactly: pi == pi_0
+    - the output is always a valid probability distribution over the four
+      quadrants (non-negative entries that sum to 1)
+    - canonical quadrant ordering is preserved end-to-end, from
+      PromptState.quadrant_scores through delta(h) logits to the keys of
+      the final pi dict
 
     Important:
     - prompts near a quadrant downweight that quadrant and upweight the
@@ -408,8 +626,41 @@ class Router:
     """
 
     def __init__(self, config: RouterConfig) -> None:
-        # store router hyperparameters; no calibration module is instantiated in heuristic v1
+        # store router hyperparameters; calibration setup happens below only in calibrated mode
         self.config = config
+
+        if not config.use_calibrated_router:
+            # heuristic mode: keep calibration attributes inert so downstream code
+            # can introspect them uniformly without branching on the flag
+            self.calibration_module: nn.Module | None = None
+            self.calibration_input_dim: int | None = None
+            self.calibration_checkpoint_metadata: dict[str, Any] | None = None
+            return
+
+        # calibrated mode: router_hidden_dim is reinterpreted here as the
+        # input dimension expected by the calibration module (i.e. the
+        # dimensionality of PromptState.hidden_representation). a dedicated
+        # field will replace this overload in a later step.
+        router_hidden_dim = config.router_hidden_dim
+        if not isinstance(router_hidden_dim, int) or isinstance(router_hidden_dim, bool):
+            raise ValueError(
+                "RouterConfig.router_hidden_dim must be a positive int when "
+                f"use_calibrated_router=True; got {type(router_hidden_dim).__name__}"
+            )
+        if router_hidden_dim <= 0:
+            raise ValueError(
+                "RouterConfig.router_hidden_dim must be a positive int when "
+                f"use_calibrated_router=True; got {router_hidden_dim}"
+            )
+
+        self.calibration_input_dim: int | None = router_hidden_dim
+        self.calibration_module: nn.Module | None = nn.Linear(
+            router_hidden_dim,
+            len(CANONICAL_QUADRANT_ORDER),
+        )
+        # populated by load_calibration_checkpoint(); None until a checkpoint
+        # is loaded, even in calibrated mode
+        self.calibration_checkpoint_metadata: dict[str, Any] | None = None
 
     def _validate_prompt_state(self, prompt_state: PromptState) -> None:
         """
@@ -555,15 +806,178 @@ class Router:
         probabilities = self._softmax(logits)
         return {key: prob for key, prob in zip(CANONICAL_QUADRANT_ORDER, probabilities)}
 
+    def _prepare_hidden_representation(self, hidden_representation: Any) -> torch.Tensor:
+        """
+        Validate hidden_representation and return a 1D float32 tensor.
+
+        Logic:
+        - presence: must not be None
+        - type:     accept torch.Tensor, list, or tuple of numeric scalars
+        - shape:    must be 1D with length == self.calibration_input_dim
+        - values:   all entries must be finite (no NaN, no inf)
+
+        Returns:
+        - torch.Tensor of dtype float32 and shape [calibration_input_dim]
+
+        Raises:
+        - ValueError naming the violated condition; no silent coercion of
+          shape, dtype, or value
+        """
+        if hidden_representation is None:
+            raise ValueError(
+                "PromptState.hidden_representation is None; "
+                "calibrated routing requires a 1D numeric vector"
+            )
+
+        expected_dim = self.calibration_input_dim
+
+        if isinstance(hidden_representation, torch.Tensor):
+            if hidden_representation.dim() != 1:
+                raise ValueError(
+                    "PromptState.hidden_representation must be a 1D tensor; "
+                    f"got shape {tuple(hidden_representation.shape)}"
+                )
+            if hidden_representation.shape[0] != expected_dim:
+                raise ValueError(
+                    f"PromptState.hidden_representation length {hidden_representation.shape[0]} "
+                    f"does not match calibration_input_dim {expected_dim}"
+                )
+            tensor = hidden_representation.to(dtype=torch.float32)
+            if not torch.isfinite(tensor).all().item():
+                raise ValueError(
+                    "PromptState.hidden_representation contains NaN or inf entries"
+                )
+            return tensor
+
+        if isinstance(hidden_representation, (list, tuple)):
+            for index, value in enumerate(hidden_representation):
+                if not isinstance(value, (int, float)):
+                    raise ValueError(
+                        f"PromptState.hidden_representation[{index}] must be int or float, "
+                        f"got {type(value).__name__}"
+                    )
+                if math.isnan(value):
+                    raise ValueError(
+                        f"PromptState.hidden_representation[{index}] is NaN"
+                    )
+                if math.isinf(value):
+                    raise ValueError(
+                        f"PromptState.hidden_representation[{index}] is infinite"
+                    )
+            if len(hidden_representation) != expected_dim:
+                raise ValueError(
+                    f"PromptState.hidden_representation length {len(hidden_representation)} "
+                    f"does not match calibration_input_dim {expected_dim}"
+                )
+            return torch.tensor(hidden_representation, dtype=torch.float32)
+
+        raise ValueError(
+            "PromptState.hidden_representation must be a torch.Tensor, list, or tuple "
+            f"of numeric scalars; got {type(hidden_representation).__name__}"
+        )
+
     def compute_router_correction(self, prompt_state: PromptState) -> dict[str, float]:
         """
         Compute the calibrated correction delta(h) around log(pi_0).
 
-        Notes:
-        - returns per-quadrant logits when calibrated mode is enabled
-        - not implemented in v1 (heuristic-only)
+        Logic:
+        - require an initialized calibration module
+        - validate and convert prompt_state.hidden_representation to a 1D
+          float32 tensor of length self.calibration_input_dim
+        - run the calibration module to obtain 4 logits aligned with
+          CANONICAL_QUADRANT_ORDER
+
+        Returns:
+        - dict[str, float] mapping each canonical quadrant key to its
+          correction logit (plain Python floats, not tensors)
+
+        Raises:
+        - ValueError if calibrated routing was requested but no calibration
+          module is initialized, or if hidden_representation violates the
+          contract (presence / type / shape / finiteness / dimension)
         """
-        raise NotImplementedError
+        if self.calibration_module is None:
+            raise ValueError(
+                "compute_router_correction requires a calibration module; "
+                "none is initialized (use_calibrated_router=False at construction time)"
+            )
+
+        hidden_tensor = self._prepare_hidden_representation(prompt_state.hidden_representation)
+        logits = self.calibration_module(hidden_tensor)
+
+        if logits.dim() != 1 or logits.shape[0] != len(CANONICAL_QUADRANT_ORDER):
+            raise ValueError(
+                f"calibration module produced logits of shape {tuple(logits.shape)}; "
+                f"expected ({len(CANONICAL_QUADRANT_ORDER)},)"
+            )
+
+        return {
+            key: float(logits[index].item())
+            for index, key in enumerate(CANONICAL_QUADRANT_ORDER)
+        }
+
+    def _validate_canonical_quadrant_dict(
+        self,
+        distribution: Any,
+        field_name: str,
+        *,
+        require_positive: bool,
+        require_sums_to_one: bool,
+        sum_tolerance: float = 1e-6,
+    ) -> None:
+        """
+        Validate a dict keyed exactly by CANONICAL_QUADRANT_ORDER.
+
+        Logic:
+        - dict-ness, complete and exclusive key set, numeric and finite values
+        - optional strict positivity (required for log-of-prior)
+        - optional sum-to-one within sum_tolerance (required for distributions)
+
+        Raises:
+        - ValueError naming the violated condition; no silent normalization
+        """
+        if not isinstance(distribution, dict):
+            raise ValueError(
+                f"{field_name} must be a dict, got {type(distribution).__name__}"
+            )
+
+        expected_keys = set(CANONICAL_QUADRANT_ORDER)
+        actual_keys = set(distribution.keys())
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
+            raise ValueError(
+                f"{field_name} is missing required keys: {sorted(missing_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+        unexpected_keys = actual_keys - expected_keys
+        if unexpected_keys:
+            raise ValueError(
+                f"{field_name} has unexpected keys: {sorted(unexpected_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+
+        for key in CANONICAL_QUADRANT_ORDER:
+            value = distribution[key]
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"{field_name}[{key!r}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"{field_name}[{key!r}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"{field_name}[{key!r}] is infinite")
+            if require_positive and value <= 0:
+                raise ValueError(
+                    f"{field_name}[{key!r}] must be strictly positive for log; got {value}"
+                )
+
+        if require_sums_to_one:
+            total = sum(float(distribution[key]) for key in CANONICAL_QUADRANT_ORDER)
+            if abs(total - 1.0) > sum_tolerance:
+                raise ValueError(
+                    f"{field_name} must sum to 1 within {sum_tolerance}; got sum={total}"
+                )
 
     def combine_prior_and_correction(
         self,
@@ -575,11 +989,38 @@ class Router:
 
         Logic:
         - pi = softmax(log(pi_0) + delta(h))
+        - validate both inputs strictly; no silent repair
+        - read both dicts in CANONICAL_QUADRANT_ORDER, build combined logits,
+          run them through _softmax, and return a canonically-ordered dict
 
-        Notes:
-        - not implemented in v1; with zero correction pi equals pi_0
+        Returns:
+        - dict[str, float] with keys exactly CANONICAL_QUADRANT_ORDER and
+          values in [0, 1] summing to 1 (up to floating-point tolerance)
+
+        Raises:
+        - ValueError if heuristic_prior is not a strictly-positive distribution
+          summing to 1 over CANONICAL_QUADRANT_ORDER, or if correction_logits
+          is not a finite numeric dict over the same key set
         """
-        raise NotImplementedError
+        self._validate_canonical_quadrant_dict(
+            heuristic_prior,
+            "heuristic_prior",
+            require_positive=True,
+            require_sums_to_one=True,
+        )
+        self._validate_canonical_quadrant_dict(
+            correction_logits,
+            "correction_logits",
+            require_positive=False,
+            require_sums_to_one=False,
+        )
+
+        combined_logits = [
+            math.log(float(heuristic_prior[key])) + float(correction_logits[key])
+            for key in CANONICAL_QUADRANT_ORDER
+        ]
+        probabilities = self._softmax(combined_logits)
+        return {key: prob for key, prob in zip(CANONICAL_QUADRANT_ORDER, probabilities)}
 
     def compute_router_losses(
         self,
@@ -589,14 +1030,143 @@ class Router:
         """
         Compute router regularization losses.
 
-        Includes:
-        - KL(pi || pi_0) anchor to the heuristic prior
-        - entropy regularization
+        Logic:
+        - validate both distributions over CANONICAL_QUADRANT_ORDER
+        - kl       = sum_i pi_i * (log(pi_i) - log(pi_0_i))   # KL(pi || pi_0)
+        - entropy  = -sum_i pi_i * log(pi_i)                  # raw H(pi)
 
-        Notes:
-        - not implemented in v1 (heuristic inference does not optimize losses)
+        Returns:
+        - {"kl": float, "entropy": float}; entropy is returned raw (not
+          negated, not weighted) so training code can decide its sign and
+          combine it with config-driven weights into the total loss
+
+        Raises:
+        - ValueError if either input is not a strictly-positive distribution
+          summing to 1 over CANONICAL_QUADRANT_ORDER
         """
-        raise NotImplementedError
+        # both inputs must be valid probability distributions; strict positivity
+        # makes math.log safe without epsilon smoothing
+        self._validate_canonical_quadrant_dict(
+            heuristic_prior,
+            "heuristic_prior",
+            require_positive=True,
+            require_sums_to_one=True,
+        )
+        self._validate_canonical_quadrant_dict(
+            calibrated_policy,
+            "calibrated_policy",
+            require_positive=True,
+            require_sums_to_one=True,
+        )
+
+        kl = 0.0
+        entropy = 0.0
+        for key in CANONICAL_QUADRANT_ORDER:
+            pi_i = float(calibrated_policy[key])
+            pi_0_i = float(heuristic_prior[key])
+            log_pi_i = math.log(pi_i)
+            kl += pi_i * (log_pi_i - math.log(pi_0_i))
+            entropy += -pi_i * log_pi_i
+
+        return {"kl": float(kl), "entropy": float(entropy)}
+
+    def _validate_calibration_checkpoint_metadata(
+        self,
+        checkpoint: Any,
+        checkpoint_path: Path,
+    ) -> None:
+        """
+        Fail-fast validation of a loaded calibration checkpoint.
+
+        Logic:
+        - the checkpoint payload must be a dict
+        - required keys: state_dict, router_hidden_dim, canonical_quadrant_order
+        - router_hidden_dim must equal self.calibration_input_dim
+        - canonical_quadrant_order must equal CANONICAL_QUADRANT_ORDER exactly
+          (as a tuple, in canonical order)
+
+        Raises:
+        - ValueError naming the missing key or the mismatched field
+        """
+        if not isinstance(checkpoint, dict):
+            raise ValueError(
+                f"calibration checkpoint at {checkpoint_path} must be a dict, "
+                f"got {type(checkpoint).__name__}"
+            )
+        for key in ("state_dict", "router_hidden_dim", "canonical_quadrant_order"):
+            if key not in checkpoint:
+                raise ValueError(
+                    f"calibration checkpoint at {checkpoint_path} is missing "
+                    f"required key {key!r}"
+                )
+
+        ckpt_dim = checkpoint["router_hidden_dim"]
+        if ckpt_dim != self.calibration_input_dim:
+            raise ValueError(
+                f"calibration checkpoint at {checkpoint_path} declares "
+                f"router_hidden_dim={ckpt_dim}, but this router was constructed "
+                f"with calibration_input_dim={self.calibration_input_dim}"
+            )
+
+        ckpt_order = tuple(checkpoint["canonical_quadrant_order"])
+        if ckpt_order != CANONICAL_QUADRANT_ORDER:
+            raise ValueError(
+                f"calibration checkpoint at {checkpoint_path} canonical_quadrant_order "
+                f"{list(ckpt_order)} does not match CANONICAL_QUADRANT_ORDER "
+                f"{list(CANONICAL_QUADRANT_ORDER)}"
+            )
+
+    def load_calibration_checkpoint(self, checkpoint_path: Path) -> None:
+        """
+        Load a trained calibration head checkpoint into self.calibration_module.
+
+        Logic:
+        - precondition: the router was constructed in calibrated mode
+          (self.calibration_module is not None); raises ValueError otherwise.
+          this method does not silently initialize a calibration module.
+        - reads the checkpoint via torch.load on the given path
+        - validates state_dict, router_hidden_dim, and canonical_quadrant_order
+          via _validate_calibration_checkpoint_metadata
+        - calls calibration_module.load_state_dict(checkpoint["state_dict"])
+        - records minimal traceability in self.calibration_checkpoint_metadata
+
+        Args:
+        - checkpoint_path: pathlib.Path to a .pt file produced by
+          src/train_calibrated_router.py
+
+        Raises:
+        - ValueError if the router is in heuristic mode, the checkpoint is
+          malformed, or its metadata does not match the router's configuration
+        - FileNotFoundError if checkpoint_path does not exist
+        """
+        if self.calibration_module is None:
+            raise ValueError(
+                "load_calibration_checkpoint requires a calibration module; "
+                "this router was constructed with use_calibrated_router=False"
+            )
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(
+                f"calibration checkpoint not found: {checkpoint_path}"
+            )
+
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location="cpu",
+            weights_only=False,
+        )
+        self._validate_calibration_checkpoint_metadata(checkpoint, checkpoint_path)
+        self.calibration_module.load_state_dict(checkpoint["state_dict"])
+
+        metadata: dict[str, Any] = {
+            "checkpoint_path": str(checkpoint_path),
+            "router_hidden_dim": checkpoint["router_hidden_dim"],
+            "canonical_quadrant_order": list(checkpoint["canonical_quadrant_order"]),
+        }
+        if "beta" in checkpoint:
+            metadata["beta"] = checkpoint["beta"]
+        if "temperature" in checkpoint:
+            metadata["temperature"] = checkpoint["temperature"]
+        self.calibration_checkpoint_metadata = metadata
 
     def route(self, prompt_state: PromptState) -> RouterState:
         """
@@ -606,20 +1176,21 @@ class Router:
         - validate prompt_state
         - build heuristic prior pi_0
         - in heuristic mode, set calibrated_policy = pi_0 and losses = {}
+        - in calibrated mode, compute delta(h), combine with pi_0 to get pi,
+          and compute regularization losses (KL anchor + raw entropy)
         - populate diagnostics with: beta, temperature, used_center_fallback,
-          quadrant_scores (copy), heuristic_prior (copy)
+          quadrant_scores (copy), heuristic_prior (copy); in calibrated mode
+          additionally include correction_logits (copy) and calibrated_policy
+          (copy)
 
         Raises:
-        - NotImplementedError if RouterConfig.use_calibrated_router is True
+        - ValueError propagated from compute_router_correction /
+          combine_prior_and_correction / compute_router_losses (e.g. invalid
+          hidden_representation, missing calibration module, malformed
+          distributions)
         """
         self._validate_prompt_state(prompt_state)
         heuristic_prior = self.build_heuristic_prior(prompt_state)
-
-        if self.config.use_calibrated_router:
-            raise NotImplementedError(
-                "calibrated routing is not implemented in heuristic v1; "
-                "set RouterConfig.use_calibrated_router=False"
-            )
 
         diagnostics = {
             "beta": self.config.beta,
@@ -628,12 +1199,31 @@ class Router:
             "quadrant_scores": dict(prompt_state.quadrant_scores),
             "heuristic_prior": dict(heuristic_prior),
         }
-        calibrated_policy = dict(heuristic_prior)
+
+        if not self.config.use_calibrated_router:
+            calibrated_policy = dict(heuristic_prior)
+            return RouterState(
+                heuristic_prior=heuristic_prior,
+                calibrated_policy=calibrated_policy,
+                diagnostics=diagnostics,
+                losses={},
+            )
+
+        correction_logits = self.compute_router_correction(prompt_state)
+        calibrated_policy = self.combine_prior_and_correction(
+            heuristic_prior,
+            correction_logits,
+        )
+        losses = self.compute_router_losses(heuristic_prior, calibrated_policy)
+
+        diagnostics["correction_logits"] = dict(correction_logits)
+        diagnostics["calibrated_policy"] = dict(calibrated_policy)
+
         return RouterState(
             heuristic_prior=heuristic_prior,
             calibrated_policy=calibrated_policy,
             diagnostics=diagnostics,
-            losses={},
+            losses=losses,
         )
 
 

@@ -924,14 +924,45 @@ class Router:
         """
         Compute router regularization losses.
 
-        Includes:
-        - KL(pi || pi_0) anchor to the heuristic prior
-        - entropy regularization
+        Logic:
+        - validate both distributions over CANONICAL_QUADRANT_ORDER
+        - kl       = sum_i pi_i * (log(pi_i) - log(pi_0_i))   # KL(pi || pi_0)
+        - entropy  = -sum_i pi_i * log(pi_i)                  # raw H(pi)
 
-        Notes:
-        - not implemented in v1 (heuristic inference does not optimize losses)
+        Returns:
+        - {"kl": float, "entropy": float}; entropy is returned raw (not
+          negated, not weighted) so training code can decide its sign and
+          combine it with config-driven weights into the total loss
+
+        Raises:
+        - ValueError if either input is not a strictly-positive distribution
+          summing to 1 over CANONICAL_QUADRANT_ORDER
         """
-        raise NotImplementedError
+        # both inputs must be valid probability distributions; strict positivity
+        # makes math.log safe without epsilon smoothing
+        self._validate_canonical_quadrant_dict(
+            heuristic_prior,
+            "heuristic_prior",
+            require_positive=True,
+            require_sums_to_one=True,
+        )
+        self._validate_canonical_quadrant_dict(
+            calibrated_policy,
+            "calibrated_policy",
+            require_positive=True,
+            require_sums_to_one=True,
+        )
+
+        kl = 0.0
+        entropy = 0.0
+        for key in CANONICAL_QUADRANT_ORDER:
+            pi_i = float(calibrated_policy[key])
+            pi_0_i = float(heuristic_prior[key])
+            log_pi_i = math.log(pi_i)
+            kl += pi_i * (log_pi_i - math.log(pi_0_i))
+            entropy += -pi_i * log_pi_i
+
+        return {"kl": float(kl), "entropy": float(entropy)}
 
     def route(self, prompt_state: PromptState) -> RouterState:
         """

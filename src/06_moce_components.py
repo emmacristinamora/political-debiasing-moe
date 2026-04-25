@@ -4,9 +4,25 @@
 # === IMPORTS ===
 
 from __future__ import annotations
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
+
+
+# === CANONICAL ORDER ===
+
+# single source of truth for the four quadrant/expert identities and their
+# canonical ordering. use this tuple whenever code needs to move between
+# dict-keyed policies and ordered representations (logits, probability
+# vectors, diagnostics dumps, per-expert aggregation). all router, editor,
+# and expert-manager surfaces must respect these exact keys and this order.
+CANONICAL_QUADRANT_ORDER: tuple[str, ...] = (
+    "left_lib",
+    "left_auth",
+    "right_lib",
+    "right_auth",
+)
 
 
 # === DATACLASSES ===
@@ -48,18 +64,20 @@ class RouterConfig:
     - KL anchoring should keep learned routing near the intended debias geometry
 
     Notes:
-    - v1 may run in heuristic-only mode
-    - the interface should still expose calibrated mode so teammates can extend it later
+    - v1 is heuristic-only; only beta, temperature, fallback_to_uniform_if_centered,
+      and center_threshold are active
+    - kl_weight, entropy_weight, router_hidden_dim, and use_calibrated_router=True
+      are placeholders reserved for the future calibrated extension
     """
 
-    use_calibrated_router: bool = False
-    beta: float = 1.0
-    temperature: float = 1.0
-    kl_weight: float = 0.1
-    entropy_weight: float = 0.01
-    router_hidden_dim: int = 128
-    fallback_to_uniform_if_centered: bool = True
-    center_threshold: float = 0.05
+    use_calibrated_router: bool = False             # v1: keep False; True path is not implemented yet
+    beta: float = 1.0                               # v1 active: scales -beta * q_i in heuristic prior
+    temperature: float = 1.0                        # v1 active: softmax temperature on the prior logits
+    kl_weight: float = 0.1                          # calibrated-mode placeholder, unused in v1
+    entropy_weight: float = 0.01                    # calibrated-mode placeholder, unused in v1
+    router_hidden_dim: int = 128                    # calibrated-mode placeholder, unused in v1
+    fallback_to_uniform_if_centered: bool = True    # v1 active: near-center prompts get uniform prior
+    center_threshold: float = 0.05                  # v1 active: threshold on bias_magnitude for fallback
 
 
 @dataclass
@@ -74,6 +92,8 @@ class ExpertConfig:
 
     Notes:
     - experts must remain separate modules and must not be merged into the base model
+    - the checkpoint fields map to CANONICAL_QUADRANT_ORDER
+      (left_lib_checkpoint, left_auth_checkpoint, right_lib_checkpoint, right_auth_checkpoint)
     """
 
     left_lib_checkpoint: Path
@@ -140,6 +160,14 @@ class PromptState:
     - bias magnitude or distance from center
 
     This object is the output of InputTransformer and the input to Router.
+
+    Router input contract (v1, heuristic):
+    - active routing inputs: quadrant_scores, bias_magnitude
+    - diagnostics only (not primary routing signal): economic_score, social_score
+    - carried for future calibrated routing only: hidden_representation
+    - traceability only (not a heuristic routing signal): prompt_text, metadata
+
+    quadrant_scores keys: see CANONICAL_QUADRANT_ORDER (module-level constant).
     """
 
     prompt_text: str
@@ -161,8 +189,17 @@ class RouterState:
     - calibrated router policy pi
     - optional training losses or diagnostics
 
+    Router output contract:
+    - heuristic_prior: normalized distribution over CANONICAL_QUADRANT_ORDER, sums to 1
+    - calibrated_policy: normalized distribution over the same key set;
+      equals heuristic_prior in heuristic-only mode
+    - diagnostics: trace data keyed by "beta", "temperature",
+      "used_center_fallback", "quadrant_scores" (copy), "heuristic_prior" (copy)
+    - losses: empty dict in heuristic-only mode
+
     Notes:
-    - in heuristic-only mode, pi may equal pi_0
+    - downstream editor consumes this object directly
+    - when serializing to an ordered vector, iterate CANONICAL_QUADRANT_ORDER
     """
 
     heuristic_prior: dict[str, float]
@@ -344,40 +381,187 @@ class Router:
     """
     Compute initial expert routing for debiasing.
 
-    Logic:
-    - build a heuristic prior pi_0 from quadrant alignment scores
-    - optionally apply a lightweight calibrated correction around log(pi_0)
-    - expose KL and entropy terms for router training
+    Scope (v1):
+    - heuristic-only: deterministic pi_0 = softmax(-beta * q / temperature),
+      with optional uniform fallback for near-center prompts
+    - calibrated methods (compute_router_correction, combine_prior_and_correction,
+      compute_router_losses) are part of the interface but unimplemented;
+      route() raises NotImplementedError when use_calibrated_router=True
+    - consumes precomputed prompt geometry from PromptState; never runs a
+      model forward pass
+
+    Input contract:
+    - treat prompt_state.quadrant_scores as authoritative input geometry
+    - do not recompute quadrants from economic_score / social_score
+    - do not use prompt_text for routing
+
+    Output contract:
+    - policies are normalized dicts keyed by CANONICAL_QUADRANT_ORDER
+    - iterate CANONICAL_QUADRANT_ORDER when converting to/from ordered logits
+    - key set stays aligned with ExpertConfig / ExpertManager naming
 
     Important:
-    - prompts near a quadrant should downweight that quadrant and upweight
-      opposite or adjacent quadrant
-    - the calibrated router should not learn a free policy from scratch;
-      it should learn a small correction around the heuristic prior
+    - prompts near a quadrant downweight that quadrant and upweight the
+      opposite and adjacent quadrants
+    - the calibrated router, when implemented, learns a small correction
+      around the heuristic prior, not a free policy from scratch
     """
 
     def __init__(self, config: RouterConfig) -> None:
-        # store router hyperparameters and initialize optional calibration module
-        raise NotImplementedError
+        # store router hyperparameters; no calibration module is instantiated in heuristic v1
+        self.config = config
+
+    def _validate_prompt_state(self, prompt_state: PromptState) -> None:
+        """
+        Fail-fast validation of router inputs.
+
+        Logic:
+        - quadrant_scores must be a dict with exactly CANONICAL_QUADRANT_ORDER keys
+        - every quadrant score must be a finite int/float
+        - bias_magnitude must be a finite int/float
+
+        Raises:
+        - ValueError on any malformed routing input
+        """
+        quadrant_scores = prompt_state.quadrant_scores
+        if quadrant_scores is None:
+            raise ValueError(
+                "PromptState.quadrant_scores is None; "
+                f"expected a dict over {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+        if not isinstance(quadrant_scores, dict):
+            raise ValueError(
+                "PromptState.quadrant_scores must be a dict, "
+                f"got {type(quadrant_scores).__name__}"
+            )
+
+        expected_keys = set(CANONICAL_QUADRANT_ORDER)
+        actual_keys = set(quadrant_scores.keys())
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
+            raise ValueError(
+                f"PromptState.quadrant_scores is missing required keys: {sorted(missing_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+        unexpected_keys = actual_keys - expected_keys
+        if unexpected_keys:
+            raise ValueError(
+                f"PromptState.quadrant_scores has unexpected keys: {sorted(unexpected_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+
+        for key in CANONICAL_QUADRANT_ORDER:
+            value = quadrant_scores[key]
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"PromptState.quadrant_scores[{key!r}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"PromptState.quadrant_scores[{key!r}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"PromptState.quadrant_scores[{key!r}] is infinite")
+
+        bias_magnitude = prompt_state.bias_magnitude
+        if not isinstance(bias_magnitude, (int, float)):
+            raise ValueError(
+                "PromptState.bias_magnitude must be int or float, "
+                f"got {type(bias_magnitude).__name__}"
+            )
+        if math.isnan(bias_magnitude):
+            raise ValueError("PromptState.bias_magnitude is NaN")
+        if math.isinf(bias_magnitude):
+            raise ValueError("PromptState.bias_magnitude is infinite")
+
+    def _extract_ordered_quadrant_scores(self, prompt_state: PromptState) -> list[float]:
+        """
+        Return quadrant scores as a list ordered by CANONICAL_QUADRANT_ORDER.
+
+        Logic:
+        - validate inputs via _validate_prompt_state
+        - read prompt_state.quadrant_scores in canonical order
+        """
+        self._validate_prompt_state(prompt_state)
+        return [float(prompt_state.quadrant_scores[key]) for key in CANONICAL_QUADRANT_ORDER]
+
+    def _softmax(self, logits: list[float]) -> list[float]:
+        """
+        Numerically stable softmax over a list of logits.
+
+        Logic:
+        - validate input list (non-empty, finite numeric values)
+        - subtract max(logits) before exponentiation for stability
+        - normalize exponentials by their sum
+        """
+        if len(logits) == 0:
+            raise ValueError("_softmax received an empty logits list")
+        for index, value in enumerate(logits):
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"_softmax logits[{index}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"_softmax logits[{index}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"_softmax logits[{index}] is infinite")
+
+        max_logit = max(logits)
+        shifted_exps = [math.exp(value - max_logit) for value in logits]
+        total = sum(shifted_exps)
+        return [exp_value / total for exp_value in shifted_exps]
+
+    def _should_use_center_fallback(self, prompt_state: PromptState) -> bool:
+        """
+        Decide whether to fall back to a uniform prior for near-center prompts.
+
+        Logic:
+        - validate inputs via _validate_prompt_state
+        - return True only when the gate is enabled and bias_magnitude
+          is strictly below the configured center_threshold
+        """
+        self._validate_prompt_state(prompt_state)
+        if not self.config.fallback_to_uniform_if_centered:
+            return False
+        return prompt_state.bias_magnitude < self.config.center_threshold
 
     def build_heuristic_prior(self, prompt_state: PromptState) -> dict[str, float]:
         """
         Build heuristic prior pi_0 from quadrant alignment scores.
 
         Logic:
-        - use counterbalancing geometry rather than same-direction amplification
-        - high alignment with one quadrant should penalize that quadrant in pi_0
-        - prompts near the center may optionally fall back to a uniform prior
+        - if the prompt is near center, return a uniform prior
+        - otherwise compute pi_0 = softmax(-beta * q / temperature) over
+          CANONICAL_QUADRANT_ORDER
+
+        Raises:
+        - ValueError if RouterConfig.temperature == 0
         """
-        raise NotImplementedError
+        if self._should_use_center_fallback(prompt_state):
+            uniform_weight = 1.0 / len(CANONICAL_QUADRANT_ORDER)
+            return {key: uniform_weight for key in CANONICAL_QUADRANT_ORDER}
+
+        if self.config.temperature == 0:
+            raise ValueError(
+                "RouterConfig.temperature must be non-zero for heuristic prior; "
+                f"got {self.config.temperature}"
+            )
+
+        ordered_scores = self._extract_ordered_quadrant_scores(prompt_state)
+        logits = [
+            -self.config.beta * score / self.config.temperature
+            for score in ordered_scores
+        ]
+        probabilities = self._softmax(logits)
+        return {key: prob for key, prob in zip(CANONICAL_QUADRANT_ORDER, probabilities)}
 
     def compute_router_correction(self, prompt_state: PromptState) -> dict[str, float]:
         """
-        Compute lightweight calibrated correction around log(pi_0).
+        Compute the calibrated correction delta(h) around log(pi_0).
 
         Notes:
-        - in heuristic-only mode this can return zeros or be skipped
-        - this is the delta(h) term from the original routing plan
+        - returns per-quadrant logits when calibrated mode is enabled
+        - not implemented in v1 (heuristic-only)
         """
         raise NotImplementedError
 
@@ -390,8 +574,10 @@ class Router:
         Combine heuristic prior and correction into calibrated policy pi.
 
         Logic:
-        - compute pi = softmax(log(pi_0) + delta(h))
-        - keep routing behavior close to the intended debiasing geometry
+        - pi = softmax(log(pi_0) + delta(h))
+
+        Notes:
+        - not implemented in v1; with zero correction pi equals pi_0
         """
         raise NotImplementedError
 
@@ -404,12 +590,11 @@ class Router:
         Compute router regularization losses.
 
         Includes:
-        - KL(pi || pi_0) to anchor learned routing to the debias prior
-        - entropy regularization to prevent collapse or overconfidence
+        - KL(pi || pi_0) anchor to the heuristic prior
+        - entropy regularization
 
         Notes:
-        - these losses may be unused in inference-only mode, but the interface
-          should still expose them for future router training
+        - not implemented in v1 (heuristic inference does not optimize losses)
         """
         raise NotImplementedError
 
@@ -418,12 +603,38 @@ class Router:
         Full routing pipeline.
 
         Flow:
+        - validate prompt_state
         - build heuristic prior pi_0
-        - optionally compute calibrated policy pi around pi_0
-        - compute diagnostics and optional losses
-        - return RouterState for downstream editing
+        - in heuristic mode, set calibrated_policy = pi_0 and losses = {}
+        - populate diagnostics with: beta, temperature, used_center_fallback,
+          quadrant_scores (copy), heuristic_prior (copy)
+
+        Raises:
+        - NotImplementedError if RouterConfig.use_calibrated_router is True
         """
-        raise NotImplementedError
+        self._validate_prompt_state(prompt_state)
+        heuristic_prior = self.build_heuristic_prior(prompt_state)
+
+        if self.config.use_calibrated_router:
+            raise NotImplementedError(
+                "calibrated routing is not implemented in heuristic v1; "
+                "set RouterConfig.use_calibrated_router=False"
+            )
+
+        diagnostics = {
+            "beta": self.config.beta,
+            "temperature": self.config.temperature,
+            "used_center_fallback": self._should_use_center_fallback(prompt_state),
+            "quadrant_scores": dict(prompt_state.quadrant_scores),
+            "heuristic_prior": dict(heuristic_prior),
+        }
+        calibrated_policy = dict(heuristic_prior)
+        return RouterState(
+            heuristic_prior=heuristic_prior,
+            calibrated_policy=calibrated_policy,
+            diagnostics=diagnostics,
+            losses={},
+        )
 
 
 # === EXPERT MANAGER ===
@@ -440,6 +651,7 @@ class ExpertManager:
     Important:
     - this component does not decide expert weights
     - all four experts should be available to the editor in dense mode
+    - expert identities and iteration order follow CANONICAL_QUADRANT_ORDER
     """
 
     def __init__(
@@ -456,7 +668,7 @@ class ExpertManager:
         """
         Load all four quadrant experts without merging them into the base model.
 
-        Experts:
+        Experts (keys follow CANONICAL_QUADRANT_ORDER):
         - left_lib
         - left_auth
         - right_lib
@@ -506,6 +718,11 @@ class Editor:
     - compute correction based on current ideological alignment
     - update weights and recompute the mixture
     - stop after convergence or max_edit_steps
+
+    Inputs:
+    - consumes RouterState as produced by Router.route()
+    - mixture weights are keyed by CANONICAL_QUADRANT_ORDER, matching router
+      output and ExpertConfig / ExpertManager naming
 
     Important:
     - the editor owns finalization
@@ -678,7 +895,7 @@ class MoCEEngine:
         # Router builds pi_0 and optional calibrated policy pi
         # ExpertManager runs the four quadrant specialists
         # Editor recursively fuses expert outputs into the final answer
-        raise NotImplementedError
+        self.router = Router(router_config)
 
     def run(self, prompt_text: str) -> MoCEResult:
         """

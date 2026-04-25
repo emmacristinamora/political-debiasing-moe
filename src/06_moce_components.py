@@ -491,6 +491,33 @@ class Router:
         self._validate_prompt_state(prompt_state)
         return [float(prompt_state.quadrant_scores[key]) for key in CANONICAL_QUADRANT_ORDER]
 
+    def _softmax(self, logits: list[float]) -> list[float]:
+        """
+        Numerically stable softmax over a list of logits.
+
+        Logic:
+        - validate input list (non-empty, finite numeric values)
+        - subtract max(logits) before exponentiation for stability
+        - normalize exponentials by their sum
+        """
+        if len(logits) == 0:
+            raise ValueError("_softmax received an empty logits list")
+        for index, value in enumerate(logits):
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"_softmax logits[{index}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"_softmax logits[{index}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"_softmax logits[{index}] is infinite")
+
+        max_logit = max(logits)
+        shifted_exps = [math.exp(value - max_logit) for value in logits]
+        total = sum(shifted_exps)
+        return [exp_value / total for exp_value in shifted_exps]
+
     def build_heuristic_prior(self, prompt_state: PromptState) -> dict[str, float]:
         """
         Build heuristic prior pi_0 from quadrant alignment scores.

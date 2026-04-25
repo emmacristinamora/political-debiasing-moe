@@ -4,6 +4,7 @@
 # === IMPORTS ===
 
 from __future__ import annotations
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
@@ -416,6 +417,68 @@ class Router:
     def __init__(self, config: RouterConfig) -> None:
         # store router hyperparameters; no calibration module is instantiated in heuristic v1
         raise NotImplementedError
+
+    def _validate_prompt_state(self, prompt_state: PromptState) -> None:
+        """
+        Fail-fast validation of router inputs.
+
+        Logic:
+        - quadrant_scores must be a dict with exactly CANONICAL_QUADRANT_ORDER keys
+        - every quadrant score must be a finite int/float
+        - bias_magnitude must be a finite int/float
+
+        Raises:
+        - ValueError on any malformed routing input
+        """
+        quadrant_scores = prompt_state.quadrant_scores
+        if quadrant_scores is None:
+            raise ValueError(
+                "PromptState.quadrant_scores is None; "
+                f"expected a dict over {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+        if not isinstance(quadrant_scores, dict):
+            raise ValueError(
+                "PromptState.quadrant_scores must be a dict, "
+                f"got {type(quadrant_scores).__name__}"
+            )
+
+        expected_keys = set(CANONICAL_QUADRANT_ORDER)
+        actual_keys = set(quadrant_scores.keys())
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
+            raise ValueError(
+                f"PromptState.quadrant_scores is missing required keys: {sorted(missing_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+        unexpected_keys = actual_keys - expected_keys
+        if unexpected_keys:
+            raise ValueError(
+                f"PromptState.quadrant_scores has unexpected keys: {sorted(unexpected_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+
+        for key in CANONICAL_QUADRANT_ORDER:
+            value = quadrant_scores[key]
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"PromptState.quadrant_scores[{key!r}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"PromptState.quadrant_scores[{key!r}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"PromptState.quadrant_scores[{key!r}] is infinite")
+
+        bias_magnitude = prompt_state.bias_magnitude
+        if not isinstance(bias_magnitude, (int, float)):
+            raise ValueError(
+                "PromptState.bias_magnitude must be int or float, "
+                f"got {type(bias_magnitude).__name__}"
+            )
+        if math.isnan(bias_magnitude):
+            raise ValueError("PromptState.bias_magnitude is NaN")
+        if math.isinf(bias_magnitude):
+            raise ValueError("PromptState.bias_magnitude is infinite")
 
     def build_heuristic_prior(self, prompt_state: PromptState) -> dict[str, float]:
         """

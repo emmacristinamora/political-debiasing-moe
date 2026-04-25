@@ -480,6 +480,17 @@ class Router:
         if math.isinf(bias_magnitude):
             raise ValueError("PromptState.bias_magnitude is infinite")
 
+    def _extract_ordered_quadrant_scores(self, prompt_state: PromptState) -> list[float]:
+        """
+        Return quadrant scores as a list ordered by CANONICAL_QUADRANT_ORDER.
+
+        Logic:
+        - validate inputs via _validate_prompt_state
+        - read prompt_state.quadrant_scores in canonical order
+        """
+        self._validate_prompt_state(prompt_state)
+        return [float(prompt_state.quadrant_scores[key]) for key in CANONICAL_QUADRANT_ORDER]
+
     def build_heuristic_prior(self, prompt_state: PromptState) -> dict[str, float]:
         """
         Build heuristic prior pi_0 from quadrant alignment scores.

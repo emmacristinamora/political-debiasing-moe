@@ -641,6 +641,7 @@ class Router:
             "temperature": self.config.temperature,
             "used_center_fallback": self._should_use_center_fallback(prompt_state),
             "quadrant_scores": dict(prompt_state.quadrant_scores),
+            "heuristic_prior": dict(heuristic_prior),
         }
         calibrated_policy = dict(heuristic_prior)
         return RouterState(

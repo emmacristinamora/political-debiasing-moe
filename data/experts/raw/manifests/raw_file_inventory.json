@@ -1,0 +1,51 @@
+{
+  "allsides": {
+    "raw_file": "/Users/emmamora/Downloads/allsides_balanced_news_headlines-texts.csv",
+    "normalized_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/allsides.jsonl",
+    "n_documents": 18392,
+    "min_word_count": 30,
+    "normalized_at": "2026-04-27T15:24:34.596901+00:00"
+  },
+  "reddit_liberal": {
+    "raw_file": "/Users/emmamora/Downloads/Liberal.json",
+    "normalized_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/reddit_liberal.jsonl",
+    "n_documents": 22523,
+    "min_word_count": 100,
+    "normalized_at": "2026-04-27T15:39:04.793614+00:00"
+  },
+  "ec_press": {
+    "raw_file": "/Users/emmamora/Downloads/EC-PressReleases_1985-2020_clean.RDS",
+    "normalized_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/ec_press_releases.jsonl",
+    "n_documents": 44380,
+    "min_word_count": 100,
+    "normalized_at": "2026-04-27T15:24:54.738261+00:00"
+  },
+  "hoc": {
+    "raw_file": "/Users/emmamora/Downloads/Corp_HouseOfCommons_V2.rds",
+    "normalized_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/uk_house_of_commons.jsonl",
+    "n_documents": 1610605,
+    "min_word_count": 30,
+    "normalized_at": "2026-04-27T15:35:10.832612+00:00"
+  },
+  "ire_press": {
+    "raw_file": "/Users/emmamora/Downloads/IRE-GovPressReleases.Rds",
+    "normalized_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/ire_gov_press_releases.jsonl",
+    "n_documents": 6626,
+    "min_word_count": 100,
+    "normalized_at": "2026-04-27T15:38:39.702069+00:00"
+  },
+  "reddit_conservative": {
+    "raw_file": "/Users/emmamora/Downloads/Conservative.json",
+    "normalized_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/reddit_conservative.jsonl",
+    "n_documents": 202944,
+    "min_word_count": 100,
+    "normalized_at": "2026-04-27T15:42:09.524820+00:00"
+  },
+  "uk_press": {
+    "raw_file": "/Users/emmamora/Downloads/UK-GovPressReleases.Rds",
+    "normalized_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/uk_gov_press_releases.jsonl",
+    "n_documents": 96977,
+    "min_word_count": 100,
+    "normalized_at": "2026-04-27T15:43:41.800779+00:00"
+  }
+}

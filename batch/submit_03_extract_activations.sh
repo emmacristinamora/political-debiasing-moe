@@ -67,12 +67,15 @@ if [ ! -s "data/steering-vectors/validated_pairs/social_pairs_validated.jsonl" ]
 fi
 
 # === ECONOMIC AXIS ===
+
 echo ""
 echo "[info] ===== Running economic axis ====="
 python -u src/03_extract_activations.py --axis economic
 echo "[info] ===== Economic axis done ====="
 
+
 # === SOCIAL AXIS ===
+
 echo ""
 echo "[info] ===== Running social axis ====="
 python -u src/03_extract_activations.py --axis social

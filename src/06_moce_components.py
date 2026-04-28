@@ -2056,6 +2056,133 @@ class Editor:
         """
         raise NotImplementedError
 
+    def _run_edit_loop(
+        self,
+        initial_alpha: dict[str, float],
+        initial_alignment: dict[str, float],
+        expert_outputs: dict[str, ExpertOutput],
+    ) -> EditorResult:
+        """
+        Reusable Editor step loop.
+
+        Inputs:
+        - initial_alpha: starting mixture weights, validated as a policy
+          mapping over CANONICAL_QUADRANT_ORDER
+        - initial_alignment: starting alignment (quadrant_scores only),
+          validated as an alignment mapping over CANONICAL_QUADRANT_ORDER
+        - expert_outputs: dense expert hidden states, validated via
+          _validate_expert_outputs
+
+        Step semantics (per iteration):
+        1. delta = self._compute_delta_from_alignment(current_alignment)
+        2. alpha_next = self._update_alpha(current_alpha, delta)
+        3. mixed_hidden_state = self._mix_hidden_states(expert_outputs, alpha_next)
+        4. mixture_scores = self.score_current_mixture(mixed_hidden_state)
+        5. alignment_next = mixture_scores["quadrant_scores"]
+        6. max_alpha_change = max_q |alpha_next[q] - current_alpha[q]|
+           max_alignment_change = max_q |alignment_next[q] - current_alignment[q]|
+        7. if EditorConfig.keep_edit_trace, append an EditorStepTrace with
+           copies of every per-step dict (no aliases)
+
+        Stopping rules:
+        - use_recursive_editing=False: run exactly 1 step (max_edit_steps
+          ignored). Terminal state has stopped_early=False, stop_reason=None.
+        - use_recursive_editing=True: run up to max_edit_steps. After each
+          step, stop early if both max_alpha_change <= convergence_threshold
+          and max_alignment_change <= convergence_threshold, with
+          stopped_early=True and stop_reason="converged". Exhausting the
+          budget without convergence yields stopped_early=False,
+          stop_reason=None.
+
+        Returns:
+        - EditorResult populated with final_mixed_hidden_state, final_alpha
+          (fresh copy), final_alignment (quadrant_scores from the last
+          mixture_scores; fresh copy), step_traces (possibly empty),
+          num_steps_run, stopped_early, stop_reason
+
+        Raises:
+        - ValueError on malformed inputs or on
+          EditorConfig.max_edit_steps that is not a positive int
+        """
+        self._validate_policy_mapping(initial_alpha, "initial_alpha")
+        self._validate_alignment_mapping(initial_alignment, "initial_alignment")
+        self._validate_expert_outputs(expert_outputs)
+
+        if self.config.use_recursive_editing:
+            max_steps = self.config.max_edit_steps
+        else:
+            max_steps = 1
+        if (
+            not isinstance(max_steps, int)
+            or isinstance(max_steps, bool)
+            or max_steps < 1
+        ):
+            raise ValueError(
+                "EditorConfig.max_edit_steps must be a positive int; "
+                f"got {self.config.max_edit_steps!r}"
+            )
+
+        current_alpha = dict(initial_alpha)
+        current_alignment = dict(initial_alignment)
+        step_traces: list[EditorStepTrace] = []
+        stopped_early = False
+        stop_reason: str | None = None
+        num_steps_run = 0
+
+        for step_index in range(max_steps):
+            delta = self._compute_delta_from_alignment(current_alignment)
+            alpha_next = self._update_alpha(current_alpha, delta)
+            mixed_hidden_state = self._mix_hidden_states(expert_outputs, alpha_next)
+            mixture_scores = self.score_current_mixture(mixed_hidden_state)
+            alignment_next = mixture_scores["quadrant_scores"]
+
+            max_alpha_change = max(
+                abs(alpha_next[q] - current_alpha[q])
+                for q in CANONICAL_QUADRANT_ORDER
+            )
+            max_alignment_change = max(
+                abs(alignment_next[q] - current_alignment[q])
+                for q in CANONICAL_QUADRANT_ORDER
+            )
+
+            if self.config.keep_edit_trace:
+                step_traces.append(
+                    EditorStepTrace(
+                        step_index=step_index,
+                        alpha_before=dict(current_alpha),
+                        delta=dict(delta),
+                        alpha_after=dict(alpha_next),
+                        alignment_before=dict(current_alignment),
+                        alignment_after=dict(alignment_next),
+                        max_alpha_change=float(max_alpha_change),
+                        max_alignment_change=float(max_alignment_change),
+                    )
+                )
+
+            current_alpha = alpha_next
+            current_alignment = alignment_next
+            num_steps_run = step_index + 1
+
+            if self.config.use_recursive_editing and (
+                max_alpha_change <= self.config.convergence_threshold
+                and max_alignment_change <= self.config.convergence_threshold
+            ):
+                stopped_early = True
+                stop_reason = "converged"
+                break
+
+        # max_steps >= 1 is enforced above, so the loop ran at least once and
+        # mixed_hidden_state / current_alpha / current_alignment are bound.
+        return EditorResult(
+            final_mixed_hidden_state=mixed_hidden_state,
+            final_alpha=dict(current_alpha),
+            final_alignment=dict(current_alignment),
+            step_traces=step_traces,
+            num_steps_run=num_steps_run,
+            stopped_early=stopped_early,
+            stop_reason=stop_reason,
+        )
+
     def run_editing_loop(
         self,
         prompt_text: str,

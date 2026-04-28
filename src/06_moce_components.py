@@ -2241,9 +2241,18 @@ class MoCEEngine:
     Flow:
     - transform prompt
     - compute routing prior/policy
-    - run all experts
-    - recursively edit and fuse outputs
-    - return final text and full trace
+    - run all experts in dense mode
+    - recursively edit and fuse expert hidden states
+    - decode the final mixed hidden state and package a MoCEResult
+
+    Component ownership:
+    - InputTransformer projects prompts into compass space
+    - Router emits the heuristic prior and optional calibrated policy
+    - ExpertManager runs the four quadrant specialists in dense mode
+    - Editor returns an EditorResult (mixed hidden state plus metadata);
+      it does NOT decode
+    - the engine itself owns downstream decoding from
+      EditorResult.final_mixed_hidden_state into the final answer text
 
     Important:
     - keep this class architecture-only
@@ -2264,22 +2273,75 @@ class MoCEEngine:
         # InputTransformer handles political-state extraction
         # Router builds pi_0 and optional calibrated policy pi
         # ExpertManager runs the four quadrant specialists
-        # Editor recursively fuses expert outputs into the final answer
+        # Editor recursively fuses expert hidden states into a mixed state
+        self.input_transformer = InputTransformer(model, tokenizer, steering_config)
         self.router = Router(router_config)
+        self.expert_manager = ExpertManager(
+            model, tokenizer, expert_config, generation_config
+        )
+        self.editor = Editor(
+            model,
+            tokenizer,
+            self.input_transformer,
+            editor_config,
+            generation_config,
+        )
 
     def run(self, prompt_text: str) -> MoCEResult:
         """
         Execute the full debiasing pipeline for a single prompt.
 
         Pipeline:
-        1. transform prompt into compass-space diagnostics
-        2. compute heuristic routing prior pi_0
-        3. optionally calibrate router policy pi around pi_0
-        4. run all four quadrant experts in dense mode
-        5. recursively fuse expert hidden states through the editor; this
-           returns an EditorResult (final mixed hidden state plus metadata)
-        6. decode the final mixed hidden state into the final answer
-        7. package prompt/router/expert/editor intermediates and the decoded
-           text into a MoCEResult
+        1. validate prompt_text is a str
+        2. prompt_state  = self.input_transformer.transform(prompt_text)
+        3. router_state  = self.router.route(prompt_state)
+        4. expert_outputs = self.expert_manager.run_all_experts(
+                                prompt_text, prompt_state)
+        5. editor_result = self.editor.run_editing_loop(
+                                prompt_text, prompt_state, router_state,
+                                expert_outputs)
+        6. decode editor_result.final_mixed_hidden_state into final_text
+        7. package prompt/router/expert/editor intermediates plus final_text
+           into a MoCEResult
+
+        Decoding boundary:
+        - the Editor returns hidden-state mixing artifacts only; engine-side
+          decoding from EditorResult.final_mixed_hidden_state into the final
+          generated answer is NOT yet implemented in this file. Step 6 raises
+          NotImplementedError. Steps 1-5 are fully wired and exercise the
+          upstream pipeline before the decode boundary is hit.
+
+        Raises:
+        - ValueError if prompt_text is not a str
+        - NotImplementedError at the decode boundary (step 6)
+        - any ValueError propagated from upstream components (InputTransformer,
+          Router, ExpertManager, Editor)
         """
-        raise NotImplementedError
+        if not isinstance(prompt_text, str):
+            raise ValueError(
+                f"prompt_text must be a str, got {type(prompt_text).__name__}"
+            )
+
+        prompt_state = self.input_transformer.transform(prompt_text)
+        router_state = self.router.route(prompt_state)
+        expert_outputs = self.expert_manager.run_all_experts(prompt_text, prompt_state)
+        editor_result = self.editor.run_editing_loop(
+            prompt_text,
+            prompt_state,
+            router_state,
+            expert_outputs,
+        )
+
+        # decoding boundary: orchestration up through the Editor is complete
+        # and editor_result holds the final mixed hidden state plus metadata.
+        # Turning that hidden state back into generated tokens (and assembling
+        # the MoCEResult around the prompt/router/expert/editor intermediates)
+        # is the remaining unimplemented step.
+        raise NotImplementedError(
+            "MoCEEngine orchestration through the Editor is wired and "
+            "produces an EditorResult, but engine-side decoding from "
+            "EditorResult.final_mixed_hidden_state into MoCEResult.final_text "
+            "is not yet implemented. Remaining boundary: turn the mixed "
+            "hidden state back into generated tokens and assemble the "
+            "MoCEResult around the upstream intermediates."
+        )

@@ -2,8 +2,8 @@
   "axis": "economic",
   "positive_label": "econ_right",
   "negative_label": "econ_left",
-  "activation_input_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/steering-vectors/activations/economic_activations.pt",
-  "vectors_output_file": "/Users/emmamora/Documents/GitHub/political-debiasing-moe/data/steering-vectors/vectors/economic_vectors.pt",
+  "activation_input_file": "/Users/stefi/Documents/GitHub/political-debiasing-moe/data/steering-vectors/activations/economic_activations.pt",
+  "vectors_output_file": "/Users/stefi/Documents/GitHub/political-debiasing-moe/data/steering-vectors/vectors/economic_vectors.pt",
   "model_name": "mistralai/Mistral-7B-v0.1",
   "layers": [
     8,

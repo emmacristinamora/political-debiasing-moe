@@ -2191,25 +2191,45 @@ class Editor:
         expert_outputs: dict[str, ExpertOutput],
     ) -> EditorResult:
         """
-        Full recursive editor loop.
+        Public Editor orchestration boundary.
 
         Flow:
-        - initialize editor weights (per EditorConfig.initialization_mode)
-        - build initial fused hidden state
-        - score current mixture alignment
-        - compute correction signal
-        - update weights and re-aggregate
-        - repeat until stable or max_edit_steps reached
-        - package the final mixed hidden state, final alpha, final alignment,
-          per-step traces, and run-level metadata into an EditorResult
+        - validate external inputs (prompt_state, router_state, expert_outputs)
+        - seed alpha via initialize_editor_weights(router_state), which
+          respects EditorConfig.initialization_mode ("router_policy" uses
+          RouterState.calibrated_policy; "uniform" uses equal weights)
+        - seed alignment from prompt_state.quadrant_scores, rebuilt in
+          CANONICAL_QUADRANT_ORDER (no reliance on dict insertion order)
+        - delegate iterative editing (delta/update/mix/score/convergence/trace)
+          to _run_edit_loop(...)
 
         Notes:
-        - keep recursion shallow in v1; one-step update is the default
-        - retain full step traces for interpretability and downstream evaluation
-        - decoding the final hidden state into text is owned by MoCEEngine.run,
-          not by the editor
+        - prompt_text is accepted for pipeline-call-site compatibility but
+          is not consumed by the Editor: this method does not decode and
+          does not use the prompt string in any computation
+        - decoding the final mixed hidden state into text is owned by
+          MoCEEngine.run, not the Editor; this method returns hidden-state
+          mixing artifacts only
+
+        Returns:
+        - EditorResult produced by _run_edit_loop: final mixed hidden state,
+          final alpha, final alignment, per-step traces, and run-level
+          metadata (num_steps_run, stopped_early, stop_reason)
+
+        Raises:
+        - ValueError on any malformed external input, propagated from the
+          validators, from initialize_editor_weights, or from _run_edit_loop
         """
-        raise NotImplementedError
+        self._validate_prompt_state_for_editor(prompt_state)
+        self._validate_router_state_for_editor(router_state)
+        self._validate_expert_outputs(expert_outputs)
+
+        initial_alpha = self.initialize_editor_weights(router_state)
+        initial_alignment = {
+            key: float(prompt_state.quadrant_scores[key])
+            for key in CANONICAL_QUADRANT_ORDER
+        }
+        return self._run_edit_loop(initial_alpha, initial_alignment, expert_outputs)
 
 
 # === ENGINE ===

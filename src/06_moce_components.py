@@ -1776,6 +1776,94 @@ class Editor:
         """
         raise NotImplementedError
 
+    def _softmax(self, logits: list[float]) -> list[float]:
+        """
+        Numerically stable softmax over a list of finite logits.
+
+        Logic:
+        - validate the list (non-empty, numeric, finite per entry)
+        - subtract max(logits) before exponentiation for numerical stability
+        - normalize exponentials by their sum
+
+        Notes:
+        - mirrors Router._softmax style; kept local so Editor numeric
+          logic is self-contained without cross-class references
+
+        Raises:
+        - ValueError if the logits list is empty or contains a non-numeric,
+          NaN, or inf entry
+        """
+        if len(logits) == 0:
+            raise ValueError("_softmax received an empty logits list")
+        for index, value in enumerate(logits):
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"_softmax logits[{index}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"_softmax logits[{index}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"_softmax logits[{index}] is infinite")
+
+        max_logit = max(logits)
+        shifted_exps = [math.exp(value - max_logit) for value in logits]
+        total = sum(shifted_exps)
+        return [exp_value / total for exp_value in shifted_exps]
+
+    def _update_alpha(
+        self,
+        alpha_current: dict[str, float],
+        delta: dict[str, float],
+    ) -> dict[str, float]:
+        """
+        Apply the additive log-space correction to alpha.
+
+        Rule:
+        - alpha_next = softmax(log(alpha_current) + delta)
+
+        Inputs:
+        - alpha_current: probability distribution over CANONICAL_QUADRANT_ORDER.
+          Validated as a policy mapping (canonical keys, numeric, finite,
+          strictly positive, sums to 1). Strict positivity makes log() safe
+          without epsilon smoothing.
+        - delta: signed real-valued additive correction over the same
+          canonical key set. Validated as an alignment-style mapping
+          (canonical keys, numeric, finite). delta is NOT itself a
+          probability distribution; softmax is the only normalization.
+
+        Computation:
+        - iterate CANONICAL_QUADRANT_ORDER (no reliance on dict order)
+        - combined_logit_i = log(alpha_current_i) + delta_i
+        - alpha_next = self._softmax(combined_logits)
+
+        Properties:
+        - zero delta yields alpha_next == alpha_current up to floating-point
+          tolerance
+        - increasing delta_i monotonically increases alpha_next_i
+        - alpha_next is strictly positive and sums to 1 (softmax invariants)
+
+        Returns:
+        - a fresh dict keyed by CANONICAL_QUADRANT_ORDER mapping to plain
+          Python floats; these are the updated Editor mixture weights,
+          not expert outputs
+
+        Raises:
+        - ValueError if alpha_current fails policy validation, or delta
+          fails alignment-mapping validation
+        """
+        self._validate_policy_mapping(alpha_current, "alpha_current")
+        self._validate_alignment_mapping(delta, "delta")
+        combined_logits = [
+            math.log(float(alpha_current[key])) + float(delta[key])
+            for key in CANONICAL_QUADRANT_ORDER
+        ]
+        next_values = self._softmax(combined_logits)
+        return {
+            key: prob
+            for key, prob in zip(CANONICAL_QUADRANT_ORDER, next_values)
+        }
+
     def update_editor_weights(
         self,
         current_weights: dict[str, float],

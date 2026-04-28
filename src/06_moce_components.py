@@ -123,9 +123,16 @@ class EditorConfig:
 
     Logic:
     - initialize editor weights from the router unless explicitly overridden
-    - aggregate expert outputs into a fused representation
+    - aggregate expert outputs into a fused hidden-state representation
     - compute correction from ideological alignment of the current mixture
     - update weights and recompute until convergence or max steps
+
+    initialization_mode semantics:
+    - "router_policy" (default): initialize alpha from RouterState
+      (calibrated_policy when available, otherwise heuristic_prior)
+    - "uniform": initialize alpha as a uniform distribution over
+      CANONICAL_QUADRANT_ORDER, ignoring the router policy
+    Allowed values are exactly {"router_policy", "uniform"}.
 
     Notes:
     - v1 should default to one update step
@@ -140,6 +147,7 @@ class EditorConfig:
     stop_on_small_weight_change: bool = True
     rescore_current_mixture: bool = True
     keep_edit_trace: bool = True
+    initialization_mode: str = "router_policy"
 
 
 @dataclass
@@ -269,19 +277,54 @@ class EditorStepTrace:
 
     Contains:
     - step index
-    - current weights before and after correction
-    - correction signal used at this step
-    - ideological score of the current fused mixture
-    - optional intermediate decoded text
+    - alpha (mixture weights) before and after the correction update
+    - delta correction logits applied at this step
+    - mixture alignment before and after re-aggregation
+    - scalar summaries of weight and alignment movement, useful for
+      stop diagnostics and post-hoc inspection
+
+    Notes:
+    - this trace is intentionally lightweight: dict-of-float scalars only.
+      Do not store hidden-state tensors or decoded text here.
     """
 
     step_index: int
-    input_weights: dict[str, float]
-    correction_signal: dict[str, float]
-    updated_weights: dict[str, float]
-    mixture_alignment: dict[str, float]
-    intermediate_text: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    alpha_before: dict[str, float]
+    delta: dict[str, float]
+    alpha_after: dict[str, float]
+    alignment_before: dict[str, float]
+    alignment_after: dict[str, float]
+    max_alpha_change: float
+    max_alignment_change: float
+
+
+@dataclass
+class EditorResult:
+    """
+    Full output of Editor.run_editing_loop.
+
+    Contains:
+    - final fused hidden state ready for downstream decoding
+    - final mixture weights (alpha) and ideological alignment
+    - per-step traces for interpretability
+    - run-level metadata: number of steps run, early-stop flag, stop reason
+
+    Notes:
+    - the editor returns hidden-state mixing artifacts only; decoding the
+      final hidden state into text is owned by MoCEEngine.run
+    - stop_reason is None when the loop exited because max_edit_steps was
+      reached without an early-stop condition firing; otherwise it names
+      the condition that triggered early termination (e.g.
+      "small_alpha_change", "small_alignment_change")
+    """
+
+    final_mixed_hidden_state: torch.Tensor
+    final_alpha: dict[str, float]
+    final_alignment: dict[str, float]
+    step_traces: list[EditorStepTrace]
+    num_steps_run: int
+    stopped_early: bool
+    stop_reason: str | None = None
 
 
 @dataclass
@@ -291,16 +334,19 @@ class MoCEResult:
 
     This should be rich enough that 07_run_moce.py only needs to save it,
     not reconstruct anything after the fact.
+
+    Ownership boundary:
+    - Editor returns mixing artifacts (see EditorResult); it does not decode.
+    - MoCEEngine.run owns downstream decoding and packages the final text
+      into this result.
     """
 
     prompt_text: str
     prompt_state: PromptState
     router_state: RouterState
     expert_outputs: dict[str, ExpertOutput]
-    editor_trace: list[EditorStepTrace]
-    final_weights: dict[str, float]
+    editor_result: EditorResult | None
     final_text: str
-    final_alignment: dict[str, float]
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -1300,13 +1346,15 @@ class ExpertManager:
 
 class Editor:
     """
-    Recursively fuse expert outputs into a more politically neutral final answer.
+    Recursively fuse expert hidden states into a debiased mixed hidden state.
 
     Logic:
-    - initialize mixture weights from the router
-    - aggregate expert outputs into a fused state
-    - compute correction based on current ideological alignment
-    - update weights and recompute the mixture
+    - initialize mixture weights from the router policy (or uniform, per
+      EditorConfig.initialization_mode)
+    - aggregate expert hidden states into a fused state
+    - score current ideological alignment of the mixture
+    - compute correction based on current alignment
+    - update weights and re-aggregate
     - stop after convergence or max_edit_steps
 
     Inputs:
@@ -1314,9 +1362,11 @@ class Editor:
     - mixture weights are keyed by CANONICAL_QUADRANT_ORDER, matching router
       output and ExpertConfig / ExpertManager naming
 
-    Important:
-    - the editor owns finalization
-    - final output is produced by the editor, not by a separate output transformer
+    Output ownership:
+    - the editor returns an EditorResult: final mixed hidden state, final
+      alpha and alignment, per-step traces, and run-level metadata
+    - the editor does NOT decode text; downstream decoding into the final
+      generated answer is owned by MoCEEngine.run
     """
 
     def __init__(
@@ -1330,13 +1380,285 @@ class Editor:
         # keep access to the base model, tokenizer, projector, and editor hyperparameters
         raise NotImplementedError
 
-    def initialize_editor_weights(self, router_state: RouterState) -> dict[str, float]:
+    def _validate_canonical_mapping(self, mapping: Any, name: str) -> None:
         """
-        Initialize editor weights from the router policy unless overridden.
+        Validate that a mapping is a dict keyed exactly by CANONICAL_QUADRANT_ORDER.
 
         Logic:
-        - default to calibrated router policy if available
-        - fall back to heuristic prior or uniform weights if needed
+        - dict-ness only; value types and value semantics are checked by callers
+        - missing or extra keys raise ValueError naming them
+        - never relies on dict insertion order
+
+        Raises:
+        - ValueError if mapping is not a dict, or its key set does not equal
+          CANONICAL_QUADRANT_ORDER exactly
+        """
+        if not isinstance(mapping, dict):
+            raise ValueError(
+                f"{name} must be a dict, got {type(mapping).__name__}"
+            )
+        expected_keys = set(CANONICAL_QUADRANT_ORDER)
+        actual_keys = set(mapping.keys())
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
+            raise ValueError(
+                f"{name} is missing required keys: {sorted(missing_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+        unexpected_keys = actual_keys - expected_keys
+        if unexpected_keys:
+            raise ValueError(
+                f"{name} has unexpected keys: {sorted(unexpected_keys)}; "
+                f"expected exactly {list(CANONICAL_QUADRANT_ORDER)}"
+            )
+
+    def _ordered_quadrant_values(
+        self,
+        mapping: dict[str, float],
+        name: str,
+    ) -> list[float]:
+        """
+        Return values from a canonical-key mapping in CANONICAL_QUADRANT_ORDER.
+
+        Logic:
+        - validate keys via _validate_canonical_mapping
+        - read values in canonical order; never depend on dict insertion order
+        - cast each value to float for downstream numeric use
+
+        Raises:
+        - ValueError if the mapping fails canonical-key validation
+        """
+        self._validate_canonical_mapping(mapping, name)
+        return [float(mapping[key]) for key in CANONICAL_QUADRANT_ORDER]
+
+    def _mapping_from_ordered_values(
+        self,
+        values: list[float] | tuple[float, ...],
+        name: str,
+    ) -> dict[str, float]:
+        """
+        Convert a list/tuple of values aligned with CANONICAL_QUADRANT_ORDER
+        into a canonically-keyed dict.
+
+        Logic:
+        - require exactly len(CANONICAL_QUADRANT_ORDER) entries (no padding,
+          no truncation)
+        - require numeric scalars; canonical key naming is preserved
+
+        Raises:
+        - ValueError if values is not a list/tuple, has the wrong length, or
+          contains a non-numeric entry
+        """
+        if not isinstance(values, (list, tuple)):
+            raise ValueError(
+                f"{name} must be a list or tuple, got {type(values).__name__}"
+            )
+        if len(values) != len(CANONICAL_QUADRANT_ORDER):
+            raise ValueError(
+                f"{name} must have exactly {len(CANONICAL_QUADRANT_ORDER)} entries "
+                f"aligned with CANONICAL_QUADRANT_ORDER; got {len(values)}"
+            )
+        for index, value in enumerate(values):
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"{name}[{index}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+        return {
+            key: float(value)
+            for key, value in zip(CANONICAL_QUADRANT_ORDER, values)
+        }
+
+    def _validate_policy_mapping(
+        self,
+        policy: Any,
+        name: str,
+        *,
+        sum_tolerance: float = 1e-6,
+    ) -> None:
+        """
+        Validate a probability distribution over CANONICAL_QUADRANT_ORDER.
+
+        Requirements:
+        - keys match CANONICAL_QUADRANT_ORDER exactly
+        - values are int or float, finite (no NaN, no inf), strictly positive
+        - values sum to 1 within sum_tolerance
+
+        Raises:
+        - ValueError naming the violated condition; no silent normalization
+        """
+        self._validate_canonical_mapping(policy, name)
+        for key in CANONICAL_QUADRANT_ORDER:
+            value = policy[key]
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"{name}[{key!r}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"{name}[{key!r}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"{name}[{key!r}] is infinite")
+            if value <= 0:
+                raise ValueError(
+                    f"{name}[{key!r}] must be strictly positive for a policy; "
+                    f"got {value}"
+                )
+        total = sum(float(policy[key]) for key in CANONICAL_QUADRANT_ORDER)
+        if abs(total - 1.0) > sum_tolerance:
+            raise ValueError(
+                f"{name} must sum to 1 within {sum_tolerance}; got sum={total}"
+            )
+
+    def _validate_alignment_mapping(self, alignment: Any, name: str) -> None:
+        """
+        Validate a quadrant-alignment mapping over CANONICAL_QUADRANT_ORDER.
+
+        Requirements:
+        - keys match CANONICAL_QUADRANT_ORDER exactly
+        - values are int or float and finite (no NaN, no inf)
+        - no positivity or sum-to-1 constraint (alignment scores are signed
+          and arbitrarily scaled, unlike policies)
+
+        Raises:
+        - ValueError naming the violated condition
+        """
+        self._validate_canonical_mapping(alignment, name)
+        for key in CANONICAL_QUADRANT_ORDER:
+            value = alignment[key]
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"{name}[{key!r}] must be int or float, "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"{name}[{key!r}] is NaN")
+            if math.isinf(value):
+                raise ValueError(f"{name}[{key!r}] is infinite")
+
+    def _validate_expert_outputs(
+        self,
+        expert_outputs: dict[str, ExpertOutput],
+    ) -> None:
+        """
+        Validate the dense expert-output dict consumed by the Editor.
+
+        Requirements:
+        - keys match CANONICAL_QUADRANT_ORDER exactly
+        - each value is an ExpertOutput
+        - each ExpertOutput.hidden_output is a non-None torch.Tensor with
+          all entries finite (no NaN, no inf)
+        - all hidden-state tensors share an identical shape
+
+        Notes:
+        - the Editor mixes ExpertOutput.hidden_output. The dataclass field is
+          typed `Any | None = None` for upstream flexibility, but the Editor
+          contract requires a real torch.Tensor here -- None is rejected
+          loudly rather than silently broadening the contract.
+
+        Raises:
+        - ValueError naming the violated condition
+        """
+        self._validate_canonical_mapping(expert_outputs, "expert_outputs")
+
+        reference_shape: tuple[int, ...] | None = None
+        for key in CANONICAL_QUADRANT_ORDER:
+            output = expert_outputs[key]
+            if not isinstance(output, ExpertOutput):
+                raise ValueError(
+                    f"expert_outputs[{key!r}] must be an ExpertOutput, "
+                    f"got {type(output).__name__}"
+                )
+            hidden_output = output.hidden_output
+            if hidden_output is None:
+                raise ValueError(
+                    f"expert_outputs[{key!r}].hidden_output is None; "
+                    "Editor mixing requires a torch.Tensor hidden state"
+                )
+            if not isinstance(hidden_output, torch.Tensor):
+                raise ValueError(
+                    f"expert_outputs[{key!r}].hidden_output must be a torch.Tensor, "
+                    f"got {type(hidden_output).__name__}"
+                )
+            if not torch.isfinite(hidden_output).all().item():
+                raise ValueError(
+                    f"expert_outputs[{key!r}].hidden_output contains NaN or inf entries"
+                )
+            current_shape = tuple(hidden_output.shape)
+            if reference_shape is None:
+                reference_shape = current_shape
+            elif current_shape != reference_shape:
+                raise ValueError(
+                    f"expert_outputs[{key!r}].hidden_output has shape {current_shape}; "
+                    f"expected {reference_shape} (all expert hidden states must "
+                    "share an identical shape)"
+                )
+
+    def _validate_prompt_state_for_editor(self, prompt_state: Any) -> None:
+        """
+        Validate the PromptState fields the Editor consumes.
+
+        Requirements:
+        - prompt_state is a PromptState instance
+        - prompt_state.quadrant_scores is a valid alignment mapping over
+          CANONICAL_QUADRANT_ORDER
+
+        Notes:
+        - this validation intentionally covers only what the Editor needs at
+          this step (the alignment seed). Other PromptState fields (axis
+          scores, hidden_representation, bias_magnitude) are validated by
+          their own consumers and are not load-bearing for the Editor here.
+
+        Raises:
+        - ValueError naming the violated condition
+        """
+        if not isinstance(prompt_state, PromptState):
+            raise ValueError(
+                "prompt_state must be a PromptState, "
+                f"got {type(prompt_state).__name__}"
+            )
+        self._validate_alignment_mapping(
+            prompt_state.quadrant_scores,
+            "prompt_state.quadrant_scores",
+        )
+
+    def _validate_router_state_for_editor(self, router_state: Any) -> None:
+        """
+        Validate the RouterState fields the Editor consumes.
+
+        Requirements:
+        - router_state is a RouterState instance
+        - router_state.calibrated_policy is a valid policy mapping over
+          CANONICAL_QUADRANT_ORDER
+
+        Notes:
+        - router-based initialization uses calibrated_policy. In heuristic-only
+          mode Router.route() already mirrors heuristic_prior into
+          calibrated_policy, so this single field is the agreed Editor entry
+          point regardless of router mode.
+
+        Raises:
+        - ValueError naming the violated condition
+        """
+        if not isinstance(router_state, RouterState):
+            raise ValueError(
+                "router_state must be a RouterState, "
+                f"got {type(router_state).__name__}"
+            )
+        self._validate_policy_mapping(
+            router_state.calibrated_policy,
+            "router_state.calibrated_policy",
+        )
+
+    def initialize_editor_weights(self, router_state: RouterState) -> dict[str, float]:
+        """
+        Initialize editor weights according to EditorConfig.initialization_mode.
+
+        Logic:
+        - "router_policy": use calibrated_policy when available, otherwise
+          fall back to heuristic_prior
+        - "uniform": uniform distribution over CANONICAL_QUADRANT_ORDER,
+          ignoring the router policy entirely
         """
         raise NotImplementedError
 
@@ -1346,38 +1668,27 @@ class Editor:
         weights: dict[str, float],
     ) -> Any:
         """
-        Build fused representation from dense expert outputs.
+        Build fused hidden-state representation from dense expert outputs.
 
         Notes:
         - this is the first aggregation stage inside the editor
         - aggregation should remain interpretable and traceable across edit steps
-        """
-        raise NotImplementedError
-
-    def decode_fused_representation(
-        self,
-        fused_representation: Any,
-        prompt_text: str,
-    ) -> str:
-        """
-        Decode current fused state into text.
-
-        Important:
-        - decoding is part of editor finalization, not a separate component
+        - the output stays in hidden-state space; no decoding happens here
         """
         raise NotImplementedError
 
     def score_current_mixture(
         self,
         fused_representation: Any,
-        decoded_text: str | None = None,
     ) -> dict[str, float]:
         """
-        Recompute ideological alignment of the current mixture.
+        Recompute ideological alignment of the current mixed hidden state.
 
         Logic:
-        - use current mixture alignment, not only original prompt alignment
-        - this enables recursive correction rather than one-shot prompt-based editing
+        - project the fused hidden state through the same compass-space
+          machinery used by InputTransformer to obtain quadrant alignment
+        - use current mixture alignment, not only original prompt alignment;
+          this enables recursive correction rather than one-shot prompt-based editing
         """
         raise NotImplementedError
 
@@ -1432,22 +1743,25 @@ class Editor:
         prompt_state: PromptState,
         router_state: RouterState,
         expert_outputs: dict[str, ExpertOutput],
-    ) -> tuple[str, dict[str, float], dict[str, float], list[EditorStepTrace]]:
+    ) -> EditorResult:
         """
         Full recursive editor loop.
 
         Flow:
-        - initialize editor weights
-        - build initial fused representation
-        - decode and rescore current mixture
+        - initialize editor weights (per EditorConfig.initialization_mode)
+        - build initial fused hidden state
+        - score current mixture alignment
         - compute correction signal
         - update weights and re-aggregate
-        - repeat until stable
-        - return final text, final weights, final alignment, and edit trace
+        - repeat until stable or max_edit_steps reached
+        - package the final mixed hidden state, final alpha, final alignment,
+          per-step traces, and run-level metadata into an EditorResult
 
         Notes:
         - keep recursion shallow in v1; one-step update is the default
-        - retain full trace for interpretability and downstream evaluation
+        - retain full step traces for interpretability and downstream evaluation
+        - decoding the final hidden state into text is owned by MoCEEngine.run,
+          not by the editor
         """
         raise NotImplementedError
 
@@ -1496,7 +1810,10 @@ class MoCEEngine:
         2. compute heuristic routing prior pi_0
         3. optionally calibrate router policy pi around pi_0
         4. run all four quadrant experts in dense mode
-        5. recursively fuse expert outputs through the editor
-        6. return final answer together with routing/editor traces
+        5. recursively fuse expert hidden states through the editor; this
+           returns an EditorResult (final mixed hidden state plus metadata)
+        6. decode the final mixed hidden state into the final answer
+        7. package prompt/router/expert/editor intermediates and the decoded
+           text into a MoCEResult
         """
         raise NotImplementedError

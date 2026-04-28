@@ -1720,6 +1720,47 @@ class Editor:
         """
         raise NotImplementedError
 
+    def _compute_delta_from_alignment(
+        self,
+        alignment: dict[str, float],
+    ) -> dict[str, float]:
+        """
+        Compute the additive log-space correction term delta from a quadrant
+        alignment mapping.
+
+        Rule (v1):
+        - delta[q] = -self.config.correction_beta * alignment[q]
+          for each q in CANONICAL_QUADRANT_ORDER
+
+        Semantics:
+        - larger positive alignment for a quadrant yields a more negative
+          delta for that quadrant; under the later softmax update
+          alpha_next = softmax(log(alpha) + delta), more negatively
+          aligned quadrants get relatively boosted toward neutral
+        - this helper computes only the additive correction term;
+          it does not normalize weights, does not apply softmax, and
+          does not consume the current alpha
+
+        Inputs:
+        - alignment: canonical quadrant-score mapping (signed real
+          scalars over CANONICAL_QUADRANT_ORDER); validated via
+          _validate_alignment_mapping before use
+
+        Returns:
+        - a fresh dict keyed by CANONICAL_QUADRANT_ORDER whose values
+          are plain Python floats
+
+        Raises:
+        - ValueError if alignment fails alignment-mapping validation
+          (key set, numeric type, finiteness)
+        """
+        self._validate_alignment_mapping(alignment, "alignment")
+        beta = self.config.correction_beta
+        return {
+            key: float(-beta * alignment[key])
+            for key in CANONICAL_QUADRANT_ORDER
+        }
+
     def compute_editor_correction(
         self,
         prompt_state: PromptState,

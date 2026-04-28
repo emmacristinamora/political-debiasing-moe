@@ -1690,6 +1690,60 @@ class Editor:
             f"{{'router_policy', 'uniform'}}; got {mode!r}"
         )
 
+    def _mix_hidden_states(
+        self,
+        expert_outputs: dict[str, ExpertOutput],
+        alpha: dict[str, float],
+    ) -> torch.Tensor:
+        """
+        Dense MoE fusion of expert hidden states under the current alpha.
+
+        Rule:
+        - mixed = sum_q alpha[q] * expert_outputs[q].hidden_output
+          for q in CANONICAL_QUADRANT_ORDER
+
+        Inputs:
+        - expert_outputs: canonical-keyed mapping to ExpertOutput. Validated
+          via _validate_expert_outputs, which already enforces the narrow
+          Editor-side contract: each hidden_output is a non-None torch.Tensor
+          with finite entries, and all four tensors share an identical shape.
+        - alpha: probability distribution over CANONICAL_QUADRANT_ORDER.
+          Validated via _validate_policy_mapping (canonical keys, finite,
+          strictly positive, sums to 1).
+
+        Computation:
+        - iterate CANONICAL_QUADRANT_ORDER (no reliance on dict order)
+        - seed the accumulator from the first expert (out-of-place
+          multiplication) and add the remaining three with out-of-place
+          arithmetic; expert tensors are never mutated in place
+        - dtype/device: expert tensors are used as-is. _validate_expert_outputs
+          guarantees identical shapes; dtype/device alignment is the caller's
+          responsibility (typically guaranteed by a single base model and a
+          single dense-mode forward pass over all four experts)
+
+        Semantics:
+        - this is dense MoE fusion across all four quadrant experts;
+          no expert is dropped, skipped, or substituted with a fallback
+        - the output remains in hidden-state space with the shared expert shape
+        - this helper does not decode text and does not recompute alignment
+
+        Returns:
+        - a torch.Tensor in hidden-state space matching the shared shape
+          of the input expert tensors
+
+        Raises:
+        - ValueError if expert_outputs fails expert-output validation, or
+          alpha fails policy validation
+        """
+        self._validate_expert_outputs(expert_outputs)
+        self._validate_policy_mapping(alpha, "alpha")
+
+        first_key = CANONICAL_QUADRANT_ORDER[0]
+        mixed = expert_outputs[first_key].hidden_output * float(alpha[first_key])
+        for key in CANONICAL_QUADRANT_ORDER[1:]:
+            mixed = mixed + expert_outputs[key].hidden_output * float(alpha[key])
+        return mixed
+
     def aggregate_expert_outputs(
         self,
         expert_outputs: dict[str, ExpertOutput],

@@ -1652,15 +1652,43 @@ class Editor:
 
     def initialize_editor_weights(self, router_state: RouterState) -> dict[str, float]:
         """
-        Initialize editor weights according to EditorConfig.initialization_mode.
+        Initialize alpha (editor mixture weights) per EditorConfig.initialization_mode.
 
-        Logic:
-        - "router_policy": use calibrated_policy when available, otherwise
-          fall back to heuristic_prior
-        - "uniform": uniform distribution over CANONICAL_QUADRANT_ORDER,
-          ignoring the router policy entirely
+        Modes:
+        - "router_policy": initialize alpha from RouterState.calibrated_policy.
+          In heuristic router mode Router.route() already mirrors
+          heuristic_prior into calibrated_policy, so this single field is the
+          correct entry point regardless of router mode.
+        - "uniform": initialize alpha as a uniform distribution
+          (1 / len(CANONICAL_QUADRANT_ORDER)) over the canonical quadrants,
+          ignoring router_state.
+
+        Returns:
+        - a fresh dict keyed by CANONICAL_QUADRANT_ORDER whose values form a
+          validated probability distribution (strictly positive, finite,
+          summing to 1 within policy-validator tolerance)
+
+        Raises:
+        - ValueError if EditorConfig.initialization_mode is not one of the
+          supported values, or if the chosen source mapping fails policy
+          validation
         """
-        raise NotImplementedError
+        mode = self.config.initialization_mode
+        if mode == "router_policy":
+            self._validate_router_state_for_editor(router_state)
+            return {
+                key: float(router_state.calibrated_policy[key])
+                for key in CANONICAL_QUADRANT_ORDER
+            }
+        if mode == "uniform":
+            uniform_weight = 1.0 / len(CANONICAL_QUADRANT_ORDER)
+            alpha = {key: uniform_weight for key in CANONICAL_QUADRANT_ORDER}
+            self._validate_policy_mapping(alpha, "alpha (uniform initialization)")
+            return alpha
+        raise ValueError(
+            "EditorConfig.initialization_mode must be one of "
+            f"{{'router_policy', 'uniform'}}; got {mode!r}"
+        )
 
     def aggregate_expert_outputs(
         self,

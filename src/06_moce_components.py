@@ -67,28 +67,32 @@ class RouterConfig:
     - KL anchoring should keep learned routing near the intended debias geometry
 
     use_calibrated_router semantics:
-    - False -> heuristic-only routing (current v1 behavior); Router emits
-      pi = pi_0 and does not require a calibration module
+    - False -> heuristic-only routing; Router emits pi = pi_0 and does not
+      require a calibration module
     - True  -> calibrated routing; Router emits pi = softmax(log(pi_0) + delta(h)).
       This mode requires a loaded calibration module. If the flag is True
       but no valid module is available, Router must fail loudly rather than
       silently fall back to the heuristic prior.
 
-    Notes:
-    - v1 is heuristic-only; only beta, temperature, fallback_to_uniform_if_centered,
-      and center_threshold are active
-    - kl_weight, entropy_weight, router_hidden_dim, and use_calibrated_router=True
-      are placeholders reserved for the future calibrated extension
+    Field roles:
+    - use_calibrated_router selects between the two implemented modes
+    - beta, temperature, fallback_to_uniform_if_centered, center_threshold
+      drive the heuristic prior in both modes
+    - router_hidden_dim is the calibration module's input dimension and
+      is consumed at construction time when use_calibrated_router=True
+    - kl_weight, entropy_weight are not applied at inference time; Router
+      reports raw KL and entropy via compute_router_losses for diagnostics,
+      and any weighting is done by the external training script
     """
 
-    use_calibrated_router: bool = False             # v1: keep False; True path is not implemented yet
-    beta: float = 1.0                               # v1 active: scales -beta * q_i in heuristic prior
-    temperature: float = 1.0                        # v1 active: softmax temperature on the prior logits
-    kl_weight: float = 0.1                          # calibrated-mode placeholder, unused in v1
-    entropy_weight: float = 0.01                    # calibrated-mode placeholder, unused in v1
-    router_hidden_dim: int = 128                    # calibrated-mode placeholder, unused in v1
-    fallback_to_uniform_if_centered: bool = True    # v1 active: near-center prompts get uniform prior
-    center_threshold: float = 0.05                  # v1 active: threshold on bias_magnitude for fallback
+    use_calibrated_router: bool = False             # selects heuristic vs calibrated routing
+    beta: float = 1.0                               # scales -beta * q_i in heuristic prior
+    temperature: float = 1.0                        # softmax temperature on the prior logits
+    kl_weight: float = 0.1                          # diagnostics-only at inference; consumed by trainer
+    entropy_weight: float = 0.01                    # diagnostics-only at inference; consumed by trainer
+    router_hidden_dim: int = 128                    # calibration module input dim (calibrated mode only)
+    fallback_to_uniform_if_centered: bool = True    # near-center prompts get uniform prior
+    center_threshold: float = 0.05                  # threshold on bias_magnitude for fallback
 
 
 @dataclass
@@ -128,10 +132,12 @@ class EditorConfig:
     - update weights and recompute until convergence or max steps
 
     initialization_mode semantics:
-    - "router_policy" (default): initialize alpha from RouterState
-      (calibrated_policy when available, otherwise heuristic_prior)
+    - "router_policy" (default): initialize alpha from
+      RouterState.calibrated_policy. In heuristic router mode Router.route()
+      already mirrors heuristic_prior into calibrated_policy, so this single
+      field is the correct entry point regardless of router mode.
     - "uniform": initialize alpha as a uniform distribution over
-      CANONICAL_QUADRANT_ORDER, ignoring the router policy
+      CANONICAL_QUADRANT_ORDER, ignoring the router policy.
     Allowed values are exactly {"router_policy", "uniform"}.
 
     Notes:
@@ -180,11 +186,11 @@ class PromptState:
 
     This object is the output of InputTransformer and the input to Router.
 
-    Router input contract (v1, heuristic):
-    - active routing inputs: quadrant_scores, bias_magnitude
+    Router input contract:
+    - active heuristic routing inputs: quadrant_scores, bias_magnitude
     - diagnostics only (not primary routing signal): economic_score, social_score
-    - carried for future calibrated routing only: hidden_representation
-    - traceability only (not a heuristic routing signal): prompt_text, metadata
+    - active calibrated routing input only: hidden_representation
+    - traceability only (not a routing signal): prompt_text, metadata
 
     quadrant_scores keys: see CANONICAL_QUADRANT_ORDER (module-level constant).
 
@@ -313,9 +319,9 @@ class EditorResult:
     - the editor returns hidden-state mixing artifacts only; decoding the
       final hidden state into text is owned by MoCEEngine.run
     - stop_reason is None when the loop exited because max_edit_steps was
-      reached without an early-stop condition firing; otherwise it names
-      the condition that triggered early termination (e.g.
-      "small_alpha_change", "small_alignment_change")
+      reached without an early-stop condition firing; the only early-stop
+      reason currently emitted is "converged" (both max_alpha_change and
+      max_alignment_change at or below EditorConfig.convergence_threshold)
     """
 
     final_mixed_hidden_state: torch.Tensor
@@ -565,17 +571,17 @@ class Router:
     """
     Compute initial expert routing for debiasing.
 
-    Scope (v1):
-    - heuristic-only: deterministic pi_0 = softmax(-beta * q / temperature),
+    Scope:
+    - heuristic mode: deterministic pi_0 = softmax(-beta * q / temperature),
       with optional uniform fallback for near-center prompts
-    - calibrated methods (compute_router_correction, combine_prior_and_correction,
-      compute_router_losses) are part of the interface but unimplemented;
-      route() raises NotImplementedError when use_calibrated_router=True
+    - calibrated mode: pi = softmax(log(pi_0) + delta(h)) using a loaded
+      calibration module; compute_router_correction, combine_prior_and_correction,
+      compute_router_losses, and load_calibration_checkpoint are implemented
     - consumes precomputed prompt geometry from PromptState; never runs a
       model forward pass
 
-    Calibrated routing (definition; not yet implemented):
-    - pi_0     : heuristic prior built from quadrant scores (v1 logic)
+    Calibrated routing:
+    - pi_0     : heuristic prior built from quadrant scores
     - delta(h) : learned correction logits derived from the prompt's
                  hidden representation
     - pi       : final calibrated policy
@@ -583,14 +589,15 @@ class Router:
     - semantics: calibrated routing does NOT replace the heuristic prior;
                  it modifies it additively in log-space.
 
-    Calibration module (interface; not yet implemented):
+    Calibration module:
     - a learned correction module is owned by Router (not by an external
       component) and lives inside this class
     - input  : PromptState.hidden_representation
     - output : 4 logits aligned exactly with CANONICAL_QUADRANT_ORDER;
                no alternative ordering is permitted at any boundary
-    - architecture (linear vs MLP) is intentionally left abstract here;
-      it is a single learned mapping h -> R^4
+    - the current implementation is a single linear mapping h -> R^4
+      (nn.Linear); the architecture is intentionally simple to keep the
+      correction small relative to the heuristic prior
 
     Runtime behavior (use_calibrated_router):
     - False : heuristic-only routing; pi = pi_0; calibrated_policy mirrors
@@ -639,16 +646,16 @@ class Router:
       checkpoint metadata; any mismatch must raise an error at runtime
       rather than be silently reshaped, padded, or truncated
 
-    Calibrated-mode validation requirement (to be implemented later in
-    compute_router_correction; not implemented in this step):
+    Calibrated-mode validation requirements (enforced by
+    _prepare_hidden_representation, called from compute_router_correction):
     - hidden_representation must be present (not None)
     - it must be a 1D numeric vector
     - all entries must be finite (no NaN, no inf)
     - its dimension must match the calibration module's expected input
-    - any violation must raise ValueError with a precise message
-      identifying the failed condition (presence / shape / finiteness /
-      dimensional mismatch)
-    - heuristic-mode routing must NOT trigger any of these checks
+    - any violation raises ValueError with a precise message identifying
+      the failed condition (presence / shape / finiteness / dimensional
+      mismatch)
+    - heuristic-mode routing does NOT trigger any of these checks
 
     Output contract:
     - policies are normalized dicts keyed by CANONICAL_QUADRANT_ORDER
@@ -667,8 +674,8 @@ class Router:
     Important:
     - prompts near a quadrant downweight that quadrant and upweight the
       opposite and adjacent quadrants
-    - the calibrated router, when implemented, learns a small correction
-      around the heuristic prior, not a free policy from scratch
+    - the calibrated router learns a small correction around the heuristic
+      prior, not a free policy from scratch
     """
 
     def __init__(self, config: RouterConfig) -> None:

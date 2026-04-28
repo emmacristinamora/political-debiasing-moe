@@ -1761,18 +1761,126 @@ class Editor:
 
     def score_current_mixture(
         self,
-        fused_representation: Any,
-    ) -> dict[str, float]:
+        mixed_hidden_state: torch.Tensor,
+    ) -> dict[str, Any]:
         """
-        Recompute ideological alignment of the current mixed hidden state.
+        Recompute the political alignment of the current mixed hidden state.
 
-        Logic:
-        - project the fused hidden state through the same compass-space
-          machinery used by InputTransformer to obtain quadrant alignment
-        - use current mixture alignment, not only original prompt alignment;
-          this enables recursive correction rather than one-shot prompt-based editing
+        Inputs:
+        - mixed_hidden_state: the fused hidden state produced by
+          _mix_hidden_states. Must be a torch.Tensor with finite entries.
+
+        Output (fresh dict, plain Python floats):
+        - "economic_score": float
+        - "social_score":   float
+        - "quadrant_scores": dict[str, float]   # rebuilt in CANONICAL_QUADRANT_ORDER
+        - "bias_magnitude": float
+
+        Scoring path:
+        - mirrors InputTransformer.transform on a hidden state:
+          maybe-center the representation, compute axis scores,
+          compute quadrant scores, derive bias magnitude
+        - reuses the Editor's stored InputTransformer (self.input_transformer);
+          the Editor does not load steering vectors itself
+
+        Validation:
+        - mixed_hidden_state is a torch.Tensor with all-finite entries
+        - axis-score output contains numeric, finite economic_score and
+          social_score
+        - quadrant_scores passes _validate_alignment_mapping (canonical
+          keys, numeric, finite); rebuilt in canonical order so the
+          projection helper's dict insertion order is never trusted
+        - bias_magnitude is numeric, finite, non-negative
+
+        Semantics:
+        - this helper recomputes the alignment of the fused hidden state
+          for use by recursive editing, step traces, and final diagnostics
+        - it does not update alpha, mix experts, or decode text
+        - steering-vector loading is delegated to InputTransformer
+
+        Raises:
+        - ValueError naming the violated condition; no silent coercion of
+          InputTransformer outputs
         """
-        raise NotImplementedError
+        if not isinstance(mixed_hidden_state, torch.Tensor):
+            raise ValueError(
+                "mixed_hidden_state must be a torch.Tensor, "
+                f"got {type(mixed_hidden_state).__name__}"
+            )
+        if not torch.isfinite(mixed_hidden_state).all().item():
+            raise ValueError("mixed_hidden_state contains NaN or inf entries")
+
+        # mirror the InputTransformer pipeline used to build PromptState:
+        # encode is skipped (we already hold a hidden state), then
+        # maybe_center -> axis_scores -> quadrant_scores -> bias_magnitude
+        centered = self.input_transformer.maybe_center_representation(mixed_hidden_state)
+        axis_scores = self.input_transformer.compute_axis_scores(centered)
+        quadrant_scores = self.input_transformer.compute_quadrant_scores(centered)
+
+        if not isinstance(axis_scores, dict):
+            raise ValueError(
+                "InputTransformer.compute_axis_scores must return a dict, "
+                f"got {type(axis_scores).__name__}"
+            )
+        for required_key in ("economic_score", "social_score"):
+            if required_key not in axis_scores:
+                raise ValueError(
+                    f"InputTransformer.compute_axis_scores output is missing "
+                    f"required key {required_key!r}"
+                )
+
+        economic_score = axis_scores["economic_score"]
+        social_score = axis_scores["social_score"]
+        for name, value in (
+            ("economic_score", economic_score),
+            ("social_score", social_score),
+        ):
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"InputTransformer.compute_axis_scores output {name!r} "
+                    f"must be int or float, got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(
+                    f"InputTransformer.compute_axis_scores output {name!r} is NaN"
+                )
+            if math.isinf(value):
+                raise ValueError(
+                    f"InputTransformer.compute_axis_scores output {name!r} is infinite"
+                )
+
+        self._validate_alignment_mapping(
+            quadrant_scores,
+            "InputTransformer.compute_quadrant_scores",
+        )
+
+        bias_magnitude = self.input_transformer.compute_bias_magnitude(
+            float(economic_score),
+            float(social_score),
+        )
+        if not isinstance(bias_magnitude, (int, float)):
+            raise ValueError(
+                "InputTransformer.compute_bias_magnitude must return int or float, "
+                f"got {type(bias_magnitude).__name__}"
+            )
+        if math.isnan(bias_magnitude):
+            raise ValueError("InputTransformer.compute_bias_magnitude returned NaN")
+        if math.isinf(bias_magnitude):
+            raise ValueError("InputTransformer.compute_bias_magnitude returned infinity")
+        if bias_magnitude < 0:
+            raise ValueError(
+                "InputTransformer.compute_bias_magnitude must be non-negative; "
+                f"got {bias_magnitude}"
+            )
+
+        return {
+            "economic_score": float(economic_score),
+            "social_score": float(social_score),
+            "quadrant_scores": {
+                key: float(quadrant_scores[key]) for key in CANONICAL_QUADRANT_ORDER
+            },
+            "bias_magnitude": float(bias_magnitude),
+        }
 
     def _compute_delta_from_alignment(
         self,

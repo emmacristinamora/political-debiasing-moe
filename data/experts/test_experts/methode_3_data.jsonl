@@ -1,0 +1,5034 @@
+{
+  "meta": {
+    "description": "OpinionQA-based evaluation set for method 3 (consistency). Tests whether each expert maintains ideological alignment across diverse topic categories.",
+    "total": 300,
+    "topics_covered": 20,
+    "target_per_topic": 15,
+    "usage": "Feed each question to each adapter with no persona prompt. Record responses across 20-30 runs. Check whether each adapter maintains its assigned quadrant position consistently across all topic categories.",
+    "axis_relevance_key": {
+      "economic": "primarily tests economic left-right axis",
+      "social": "primarily tests libertarian-authoritarian axis",
+      "both": "tests both axes"
+    }
+  },
+  "topic_counts": {
+    "discrimination": 15,
+    "race": 15,
+    "community health": 15,
+    "self-perception and values": 15,
+    "gender & sexuality": 15,
+    "crime/security": 15,
+    "economy and inequality": 15,
+    "relationships and family": 15,
+    "job/career": 15,
+    "education": 15,
+    "religion": 15,
+    "science": 15,
+    "news, social media, data, privacy": 15,
+    "immigration": 15,
+    "leadership": 15,
+    "healthcare system": 15,
+    "political issues": 15,
+    "global attitudes and foreign policy": 15,
+    "corporations, banks, technology and automation": 15,
+    "future": 15
+  },
+  "questions": [
+    {
+      "key": "PROBOFF_b_W92",
+      "question": "How much of a problem, if any, would you say people saying things that are very offensive to others are in the country today?",
+      "options": [
+        "Major problem",
+        "Minor problem",
+        "Not a problem",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination: other"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "IDIMPORT_W43",
+      "question": "How important is your racial background to how you think about yourself?",
+      "options": [
+        "Extremely important",
+        "Very important",
+        "Moderately important",
+        "Only a little important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "self-perception and values"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV36_W43",
+      "question": "How often, if ever, do you hear a friend or family member make comments or jokes that might be considered racist or racially insensitive about people who are not of their racial background?",
+      "options": [
+        "Often",
+        "Sometimes",
+        "Rarely",
+        "Never",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "discrimination: race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV28g_W43",
+      "question": "Would you say that black people are treated less fairly than white people, white people are treated less fairly than black people, or both are treated about equally in when seeking medical treatment situations?",
+      "options": [
+        "Black people are treated less fairly than white people",
+        "White people are treated less fairly than black people",
+        "Both are treated about equally",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "discrimination: race",
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV27_W43",
+      "question": "How much, if at all, do you think what happens to Asians in the country overall affects what happens in your own life?",
+      "options": [
+        "A lot",
+        "Some",
+        "Not much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV52_W43",
+      "question": "How much, if at all, would it bother you to hear people speak a language other than English in a public place?",
+      "options": [
+        "A lot",
+        "Some",
+        "Not much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV50_W43",
+      "question": "When it comes to the schools students attend, do you think students",
+      "options": [
+        "Should go to schools that are racially and ethnically mixed, even if it means that some students don't go to school in their local community",
+        "Should go to schools in their local community, even if it means that most schools are not racially and ethnically mixed",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV48_W43",
+      "question": "How important, if at all, would you say it is for companies and organizations to promote racial and ethnic diversity in their workplace?",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "job/career"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV49_W43",
+      "question": "When it comes to decisions about hiring and promotions, do you think companies and organizations",
+      "options": [
+        "Should take a person's race and ethnicity into account, in addition to their qualifications, in order to increase divers",
+        "Should only take a person's qualifications into account, even if it results in less diversity in the workplace",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "job/career"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "BOYSF1D_W29",
+      "question": "When it comes to raising boys, would you say there is too much emphasis or too little emphasis on encouraging boys to do well in school these days, or is it about right?",
+      "options": [
+        "Too much emphasis",
+        "Too little emphasis",
+        "About right",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "MESUM2_FE_W29",
+      "question": "How well, if at all, do the following words or phrases describe you? Supporter of rights for lesbian, gay, bisexual and transgender LGBT people",
+      "options": [
+        "Describes me well",
+        "Does not describe me well",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: guns",
+        "self-perception and values"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "MESUM1_FC_W29",
+      "question": "How well, if at all, do the following words or phrases describe you? Willing to work with people I disagree with",
+      "options": [
+        "Describes me well",
+        "Does not describe me well",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W29"
+    },
+    {
+      "key": "RACESURV26_W43",
+      "question": "How much, if at all, do you think what happens to Hispanics in the country overall affects what happens in your own life?",
+      "options": [
+        "A lot",
+        "Some",
+        "Not much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV29d_W43",
+      "question": "In your daily life, how much interaction, if any, would you say you have with people who are asian",
+      "options": [
+        "A lot of interaction",
+        "Some interaction",
+        "Not much interaction",
+        "No interaction at all",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV34c_W43",
+      "question": "Overall, how much has your family's financial situation when you were growing up helped or hurt your ability to get ahead?",
+      "options": [
+        "Helped a lot",
+        "Helped a little",
+        "Hurt a little",
+        "Hurt a lot",
+        "Neither helped nor hurt",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "status in life"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV34a_W43",
+      "question": "Overall, how much has being white/Being black/Being Hispanic/Being Asian/Your racial background helped or hurt your ability to get ahead?",
+      "options": [
+        "Helped a lot",
+        "Helped a little",
+        "Hurt a little",
+        "Hurt a lot",
+        "Neither helped nor hurt",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "discrimination: race",
+        "status in life"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV34b_W43",
+      "question": "Overall, how much has being a man/Being a woman/Your gender helped or hurt your ability to get ahead?",
+      "options": [
+        "Helped a lot",
+        "Helped a little",
+        "Hurt a little",
+        "Hurt a lot",
+        "Neither helped nor hurt",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender",
+        "status in life"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV24_W43",
+      "question": "How much, if at all, do you think what happens to white people in the country overall affects what happens in your own life?",
+      "options": [
+        "A lot",
+        "Some",
+        "Not much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV5k_W43",
+      "question": "Overall, how does being poor affect people's ability to get ahead in our country these days?",
+      "options": [
+        "Helps a lot",
+        "Helps a little",
+        "Hurts a little",
+        "Hurts a lot",
+        "Neither helps nor hurts",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV1c_W43",
+      "question": "For your relationships with family and friends aspects of your life, would you say that you are, or about where you expected to be at this point in your life?",
+      "options": [
+        "In a better situation than I expected",
+        "In a worse situation than I expected",
+        "About where I expected",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "status in life",
+        "relationships and family",
+        "self-perception and values",
+        "science: climate"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV1b_W43",
+      "question": "For your job or career aspects of your life, would you say that you are, or about where you expected to be at this point in your life?",
+      "options": [
+        "In a better situation than I expected",
+        "In a worse situation than I expected",
+        "About where I expected",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career",
+        "status in life",
+        "self-perception and values",
+        "science: climate"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV7_W43",
+      "question": "How often, if ever, does race or race relations come up in your conversations with family and friends?",
+      "options": [
+        "Often",
+        "Sometimes",
+        "Rarely",
+        "Never",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV6_W43",
+      "question": "When it comes to racial discrimination, which do you think is the bigger problem for the country today?",
+      "options": [
+        "People seeing racial discrimination where it really does not exist",
+        "People not seeing racial discrimination where it really does exist",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "discrimination: race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV5l_W43",
+      "question": "Overall, how does being wealthy affect people's ability to get ahead in our country these days?",
+      "options": [
+        "Helps a lot",
+        "Helps a little",
+        "Hurts a little",
+        "Hurts a lot",
+        "Neither helps nor hurts",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONd_W43",
+      "question": "Do you think athletic ability should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONe_W43",
+      "question": "Do you think involvement in community service should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONc_W43",
+      "question": "Do you think whether a relative attended the school should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONf_W43",
+      "question": "Do you think scores on standardized tests, such as the SAT or act should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONg_W43",
+      "question": "Do you think high school grades should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONa_W43",
+      "question": "Do you think race or ethnicity should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race",
+        "education"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONb_W43",
+      "question": "Do you think gender should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education",
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV17_W43",
+      "question": "How much, if at all, do you think the legacy of slavery affects the position of black people in American society today?",
+      "options": [
+        "A great deal",
+        "A fair amount",
+        "Not much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "race",
+      "fine_topics": [
+        "race"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "ADMISSIONh_W43",
+      "question": "Do you think being the first person in the family to go to college should be a major factor, minor factor, or not a factor in college admissions?",
+      "options": [
+        "Major factor",
+        "Minor factor",
+        "Not a factor",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV5h_W43",
+      "question": "Overall, how does being an evangelical Christian affect people's ability to get ahead in our country these days?",
+      "options": [
+        "Helps a lot",
+        "Helps a little",
+        "Hurts a little",
+        "Hurts a lot",
+        "Neither helps nor hurts",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV5i_W43",
+      "question": "Overall, how does being a man affect people's ability to get ahead in our country these days?",
+      "options": [
+        "Helps a lot",
+        "Helps a little",
+        "Hurts a little",
+        "Hurts a lot",
+        "Neither helps nor hurts",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV5g_W43",
+      "question": "Overall, how does being Muslim affect people's ability to get ahead in our country these days?",
+      "options": [
+        "Helps a lot",
+        "Helps a little",
+        "Hurts a little",
+        "Hurts a lot",
+        "Neither helps nor hurts",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV5j_W43",
+      "question": "Overall, how does being a woman affect people's ability to get ahead in our country these days?",
+      "options": [
+        "Helps a lot",
+        "Helps a little",
+        "Hurts a little",
+        "Hurts a lot",
+        "Neither helps nor hurts",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RACESURV5f_W43",
+      "question": "Overall, how does being Jewish affect people's ability to get ahead in our country these days?",
+      "options": [
+        "Helps a lot",
+        "Helps a little",
+        "Hurts a little",
+        "Hurts a lot",
+        "Neither helps nor hurts",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W43"
+    },
+    {
+      "key": "RQ2_F1C_W42",
+      "question": "How much, if anything, do you know about what nutrition research scientists do?",
+      "options": [
+        "A lot",
+        "A little",
+        "Nothing at all",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ4_F1Bb_W42",
+      "question": "Thinking about environmental research scientists, how often would you say they provide fair and accurate information when making statements about their research",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ4_F1Ba_W42",
+      "question": "Thinking about environmental research scientists, how often would you say they do a good job conducting research",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ4_F1Cc_W42",
+      "question": "Thinking about nutrition research scientists, how often would you say they admit mistakes and take responsibility for them",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ4_F1Ce_W42",
+      "question": "Thinking about nutrition research scientists, how often would you say they care about the best interests of the public",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ5_F1C_W42",
+      "question": "Overall, do you think research misconduct by nutrition research scientists is",
+      "options": [
+        "A very big problem",
+        "A moderately big problem",
+        "A small problem",
+        "Not a problem at all",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ4_F1Ca_W42",
+      "question": "Thinking about nutrition research scientists, how often would you say they do a good job conducting research",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ4_F1Cb_W42",
+      "question": "Thinking about nutrition research scientists, how often would you say they provide fair and accurate information when making statements about their research",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "GOODJOBS_W29",
+      "question": "In general, thinking about job opportunities where you live, would you say that",
+      "options": [
+        "There are plenty of good jobs available",
+        "Good jobs are difficult to find",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health",
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W29"
+    },
+    {
+      "key": "HELPHURTA_W29",
+      "question": "Thinking about your work life, has the growing number of immigrants working in this country done more to help or hurt your job or career, or hasn't it made much of a difference for your job or career?",
+      "options": [
+        "Has done more to help my job or career",
+        "Has done more to hurt my job or career",
+        "Hasn't made much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "RQ4_F1Be_W42",
+      "question": "Thinking about environmental research scientists, how often would you say they care about the best interests of the public",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ1_F1C_W42",
+      "question": "In general, would you say your view of nutrition research scientists is",
+      "options": [
+        "Mostly positive",
+        "Mostly negative",
+        "Neither positive nor negative",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "HELPHURTC_W29",
+      "question": "Thinking about your work life, has a growing emphasis on diversity in the workplace done more to help or hurt your job or career, or hasn't it made much of a difference for your job or career?",
+      "options": [
+        "Has done more to help my job or career",
+        "Has done more to hurt my job or career",
+        "Hasn't made much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "discrimination: other",
+        "job/career",
+        "status in life"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W29"
+    },
+    {
+      "key": "HELPHURTD_W29",
+      "question": "Thinking about your work life, has increased outsourcing of jobs to other countries done more to help or hurt your job or career, or hasn't it made much of a difference for your job or career?",
+      "options": [
+        "Has done more to help my job or career",
+        "Has done more to hurt my job or career",
+        "Hasn't made much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration",
+        "job/career",
+        "status in life"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "HELPHURTB_W29",
+      "question": "Thinking about your work life, has more women in the workforce done more to help or hurt your job or career, or hasn't it made much of a difference for your job or career?",
+      "options": [
+        "Has done more to help my job or career",
+        "Has done more to hurt my job or career",
+        "Hasn't made much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "gender & sexuality: gender",
+        "job/career",
+        "status in life"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W29"
+    },
+    {
+      "key": "RQ4_F1Bd_W42",
+      "question": "Thinking about environmental research scientists, how often would you say they are transparent about potential conflicts of interest with industry groups in their research",
+      "options": [
+        "All or most of time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ5_F1B_W42",
+      "question": "Overall, do you think research misconduct by environmental research scientists is",
+      "options": [
+        "A very big problem",
+        "A moderately big problem",
+        "A small problem",
+        "Not a problem at all",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ6_F1B_W42",
+      "question": "When you hear or read news stories about research misconduct by environmental research scientists, do you think of these cases as",
+      "options": [
+        "Isolated incidents",
+        "Signs of a broader problem",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ8_F1B_W42",
+      "question": "How often, if at all, do you think environmental research scientists face serious consequences if they engage in research misconduct?",
+      "options": [
+        "All or most of the time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "RQ7_F1B_W42",
+      "question": "When you hear about problems with research misconduct among environmental research scientists, which comes closer to your view, even if neither is exactly right?",
+      "options": [
+        "Most environmental research scientists have good intentions, it's the research system that's broken",
+        "The research system can work fine, it's the environmental research scientists that are the problem",
+        "Refused"
+      ],
+      "coarse_topic": "science",
+      "fine_topics": [
+        "science: science other",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "CONFf_W42",
+      "question": "How much confidence, if any, do you have in public school principals for grades K-12 to act in the best interests of the public?",
+      "options": [
+        "A great deal of confidence",
+        "A fair amount of confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "CONFg_W42",
+      "question": "How much confidence, if any, do you have in business leaders to act in the best interests of the public?",
+      "options": [
+        "A great deal of confidence",
+        "A fair amount of confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "CONFe_W42",
+      "question": "How much confidence, if any, do you have in religious leaders to act in the best interests of the public?",
+      "options": [
+        "A great deal of confidence",
+        "A fair amount of confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "CONFc_W42",
+      "question": "How much confidence, if any, do you have in the military to act in the best interests of the public?",
+      "options": [
+        "A great deal of confidence",
+        "A fair amount of confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: military"
+      ],
+      "axis_relevance": "social",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ2_F2A_W42",
+      "question": "How much, if anything, do you know about what medical doctors do?",
+      "options": [
+        "A lot",
+        "A little",
+        "Nothing at all",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ1_F2A_W42",
+      "question": "In general, would you say your view of medical doctors is",
+      "options": [
+        "Mostly positive",
+        "Mostly negative",
+        "Neither positive nor negative",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "CONFa_W42",
+      "question": "How much confidence, if any, do you have in elected officials to act in the best interests of the public?",
+      "options": [
+        "A great deal of confidence",
+        "A fair amount of confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "CONFb_W42",
+      "question": "How much confidence, if any, do you have in the news media to act in the best interests of the public?",
+      "options": [
+        "A great deal of confidence",
+        "A fair amount of confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: news and social media"
+      ],
+      "axis_relevance": "social",
+      "wave": "W42"
+    },
+    {
+      "key": "GIRLSF2D_W29",
+      "question": "When it comes to raising girls, would you say there is too much emphasis or too little emphasis on encouraging girls to do well in school these days, or is it about right?",
+      "options": [
+        "Too much emphasis",
+        "Too little emphasis",
+        "About right",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "HOOD_NHISC_W29",
+      "question": "How much do you agree or disagree with the following statements about your neighborhood? This is a close-knit neighborhood",
+      "options": [
+        "Definitely agree",
+        "Somewhat agree",
+        "Somewhat disagree",
+        "Definitely disagree",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W29"
+    },
+    {
+      "key": "FEM2BF2_W29",
+      "question": "Do you think it's a good thing or a bad thing that most people in our society look down on women who are womanly or feminine?",
+      "options": [
+        "Good thing",
+        "Bad thing",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "MASC1F1_W29",
+      "question": "Thinking about how society sees men these days, in general, would you say",
+      "options": [
+        "Most people look up to men who are manly or masculine",
+        "Most people look down on men who are manly or masculine",
+        "Neither",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "MASC2_W29",
+      "question": "Now thinking about how you see yourself, would you describe yourself as",
+      "options": [
+        "Very manly or masculine",
+        "Somewhat manly or masculine",
+        "Not too manly or masculine",
+        "Not at all manly or masculine",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W29"
+    },
+    {
+      "key": "GOPDIRCT_W29",
+      "question": "Thinking about the future of the Republican Party, would you say that you are",
+      "options": [
+        "Very optimistic",
+        "Somewhat optimistic",
+        "Somewhat pessimistic",
+        "Very pessimistic",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: current political issues/two-party"
+      ],
+      "axis_relevance": "both",
+      "wave": "W29"
+    },
+    {
+      "key": "DEMDIRCT_W29",
+      "question": "Thinking about the future of the Democratic Party, would you say that you are",
+      "options": [
+        "Very optimistic",
+        "Somewhat optimistic",
+        "Somewhat pessimistic",
+        "Very pessimistic",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: current political issues/two-party"
+      ],
+      "axis_relevance": "both",
+      "wave": "W29"
+    },
+    {
+      "key": "S12_W29",
+      "question": "In the last 12 months, how often did you eat dinner with any of the other members of your household?",
+      "options": [
+        "Basically every day",
+        "A few times a week",
+        "A few times a month",
+        "Once a month",
+        "Less than once a month",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "FAVORS_CPS_W29",
+      "question": "In the last 12 months, how often did you and your neighbors do favors for each other?",
+      "options": [
+        "Basically every day",
+        "A few times a week",
+        "A few times a month",
+        "Once a month",
+        "Less than once a month",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W29"
+    },
+    {
+      "key": "TALK_CPS_W29",
+      "question": "In the last 12 months, how often did you talk with any of your neighbors?",
+      "options": [
+        "Basically every day",
+        "A few times a week",
+        "A few times a month",
+        "Once a month",
+        "Less than once a month",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W29"
+    },
+    {
+      "key": "S13_W29",
+      "question": "This next question is about friends and family you do not live with. During the last twelve months, how often did you see or hear from friends or family, whether in-person or not?",
+      "options": [
+        "Basically every day",
+        "A few times a week",
+        "A few times a month",
+        "Once a month",
+        "Less than once a month",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "MAN1E_W29",
+      "question": "In general, how much pressure, if any, do you think men face in our country these days to be emotionally strong?",
+      "options": [
+        "A lot",
+        "Some",
+        "Not too much",
+        "None at all",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "HELPHURTG_W29",
+      "question": "Thinking about your work life, has more U.S.-made products being sold in other countries done more to help or hurt your job or career, or hasn't it made much of a difference for your job or career?",
+      "options": [
+        "Has done more to help my job or career",
+        "Has done more to hurt my job or career",
+        "Hasn't made much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy",
+        "status in life"
+      ],
+      "axis_relevance": "both",
+      "wave": "W29"
+    },
+    {
+      "key": "HELPHURTF_W29",
+      "question": "Thinking about your work life, has more foreign-made products being sold in the U.S. done more to help or hurt your job or career, or hasn't it made much of a difference for your job or career?",
+      "options": [
+        "Has done more to help my job or career",
+        "Has done more to hurt my job or career",
+        "Hasn't made much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy",
+        "status in life"
+      ],
+      "axis_relevance": "both",
+      "wave": "W29"
+    },
+    {
+      "key": "SEENFEM_W29",
+      "question": "On a different topic how important is it to you, personally, to be seen by others as womanly or feminine?",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "HELPHURTE_W29",
+      "question": "Thinking about your work life, has automation of jobs through new technology in the workplace done more to help or hurt your job or career, or hasn't it made much of a difference for your job or career?",
+      "options": [
+        "Has done more to help my job or career",
+        "Has done more to hurt my job or career",
+        "Hasn't made much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: other",
+        "self-perception and values"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W29"
+    },
+    {
+      "key": "DIFF1E_W29",
+      "question": "Do you think men and women are basically similar or basically different when it comes to the things they are good at in the workplace?",
+      "options": [
+        "Men and women are basically similar",
+        "Men and women are basically different",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "FEM1F2_W29",
+      "question": "Thinking about how society sees women these days, in general, would you say",
+      "options": [
+        "Most people look up to women who are womanly or feminine",
+        "Most people look down on women who are womanly or feminine",
+        "Neither",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W29"
+    },
+    {
+      "key": "RTDd_W49",
+      "question": "Do you think that all Americans should have the right to have the following data about themselves be permanently deleted by the people or organizations who have that information? Financial data collected by their tax preparer",
+      "options": [
+        "Yes, should have the right to have this deleted",
+        "No, should not have  the right to have this deleted",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "PP2_W49",
+      "question": "When you are asked to agree to a company's privacy policy, how often do you read it before agreeing to it?",
+      "options": [
+        "Always",
+        "Often",
+        "Sometimes",
+        "Never",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "FACE1_W49",
+      "question": "How much have you heard or read about the development of automated facial recognition technology that can identify someone based on a picture or video that includes their face?",
+      "options": [
+        "A lot",
+        "A little",
+        "Nothing at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "UNDERSTANDCO_W49",
+      "question": "How much do you feel you understand what companies are doing with the data they collect about you?",
+      "options": [
+        "A great deal",
+        "Some",
+        "Very little",
+        "Nothing",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "HOMEASSIST4_W49",
+      "question": "How important is it that your smart speaker takes your personal interests and preferences into account when responding to your questions or commands?",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not important at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "HOMEASSIST2_W49",
+      "question": "How concerned are you, if at all, about how much data your smart speaker collects about you?",
+      "options": [
+        "Very concerned",
+        "Somewhat concerned",
+        "Not too concerned",
+        "Not concerned at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "HOMEASSIST5b_W49",
+      "question": "Would you like your smart speaker to do a better job of taking your interests and preferences into account in the future, even if that meant it would need to collect more personal information about you?",
+      "options": [
+        "Yes",
+        "No",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "TRACKGOV1a_W49",
+      "question": "As far as you know, how much of what you do online or on your cellphone is being tracked by the government?",
+      "options": [
+        "All or almost all of it",
+        "Most of it",
+        "Some of it",
+        "Very little of it",
+        "None of it",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "CONTROLGRPf_W49",
+      "question": "How much control, if any, do you think you have over who can access the private conversations you've had online or using text messaging?",
+      "options": [
+        "A lot of control",
+        "A little control",
+        "No control",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "PP5e_W49",
+      "question": "How confident are you, if at all, that companies will be held accountable by the government if they misuse or compromise your data?",
+      "options": [
+        "Very confident",
+        "Somewhat confident",
+        "Not too confident",
+        "Not confident at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "PP5d_W49",
+      "question": "How confident are you, if at all, that companies will use your personal information in ways you will feel comfortable with?",
+      "options": [
+        "Very confident",
+        "Somewhat confident",
+        "Not too confident",
+        "Not confident at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "PP5a_W49",
+      "question": "How confident are you, if at all, that companies will follow what their privacy policies say they will do with your personal information?",
+      "options": [
+        "Very confident",
+        "Somewhat confident",
+        "Not too confident",
+        "Not confident at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "PP5b_W49",
+      "question": "How confident are you, if at all, that companies will promptly notify you if your personal data has been misused or compromised?",
+      "options": [
+        "Very confident",
+        "Somewhat confident",
+        "Not too confident",
+        "Not confident at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "PP4_W49",
+      "question": "How much do you typically understand the privacy policies you read?",
+      "options": [
+        "A great deal",
+        "Some",
+        "Very little",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "news, social media, data, privacy",
+      "fine_topics": [
+        "news, social media, data, privacy: data and privacy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W49"
+    },
+    {
+      "key": "PAR1_W50",
+      "question": "In general, do you think you do",
+      "options": [
+        "Too much for your adult child(ren) ages 18 to 29",
+        "Too little for your adult child(ren) ages 18 to 29",
+        "About the right amount",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "PAR2_W50",
+      "question": "In general, do you think your parents do mother does father does",
+      "options": [
+        "Too much for you",
+        "Too little for you",
+        "About the right amount",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "FAMSURV16_W50",
+      "question": "Which of the following best describes your current situation? Would you say you",
+      "options": [
+        "Would like to be in a romantic relationship",
+        "Don't want to be in a romantic relationship",
+        "Doesn't make much difference",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "ROMRELSER_W50",
+      "question": "How serious would you say your current romantic relationship is?",
+      "options": [
+        "Very serious",
+        "Somewhat serious",
+        "Not too serious",
+        "Not at all serious",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "FAMSURV19_W50",
+      "question": "Overall, would you say that things in your marriage/relationship are going",
+      "options": [
+        "Very well",
+        "Fairly well",
+        "Not too well",
+        "Not at all well",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "FAMSURV23g_W50",
+      "question": "Thinking back to when you started living with your partner, how much, if at all, was wanted to test your relationship a reason you decided to move in together?",
+      "options": [
+        "Major reason",
+        "Minor reason",
+        "Not a reason",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "SAFECRIME_W26",
+      "question": "How safe, if at all, would you say your local community is from crime? Would you say it is",
+      "options": [
+        "Very safe",
+        "Somewhat safe",
+        "Not too safe",
+        "Not at all safe",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W26"
+    },
+    {
+      "key": "GUNCONTRIBC_W26",
+      "question": "How much, if at all, do you think the amount of gun violence in movies and television contributes to gun violence in the country today?",
+      "options": [
+        "A great deal",
+        "A fair amount",
+        "Not too much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: justice system",
+        "crime/security: guns"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "GUNRESPKIDSH_W26",
+      "question": "Thinking about gun owners who have children in their home, how important do you think it is for them to: Talk to their children about gun safety",
+      "options": [
+        "Essential",
+        "Important but not essential",
+        "Not important",
+        "Should not be done",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: guns"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "ESSENPOLF1I_W36",
+      "question": "In general, how important, if at all, is it to you for someone in high political office to serve as a role model for children?",
+      "options": [
+        "Essential",
+        "Important, but not essential",
+        "Not important",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W36"
+    },
+    {
+      "key": "ESSENBIZF2L_W36",
+      "question": "In general, how important, if at all, is it to you for someone in a top executive business position to stand up for what they believe in, despite pressure to make a profit?",
+      "options": [
+        "Essential",
+        "Important, but not essential",
+        "Not important",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W36"
+    },
+    {
+      "key": "BETTERPOL2F1F_W36",
+      "question": "And thinking about some specific policy areas, in general, do you think men or women in high political offices are better at dealing with gun policy?",
+      "options": [
+        "Men are better",
+        "Women are better",
+        "No difference",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W36"
+    },
+    {
+      "key": "IMPROVE3_W36",
+      "question": "How much, if anything, do you think having more women in top leadership positions in business and government would do to improve the quality of life for all Americans?",
+      "options": [
+        "A lot",
+        "Some",
+        "Not much",
+        "Nothing at all",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W36"
+    },
+    {
+      "key": "EASIERBIZF2_W36",
+      "question": "Thinking about top executive positions in business these days, would you say it is generally",
+      "options": [
+        "Easier for men to get these positions",
+        "Easier for women to get these positions",
+        "Not much difference",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W36"
+    },
+    {
+      "key": "EASIERPOLF2_W36",
+      "question": "Thinking about high political offices these days, would you say it is generally",
+      "options": [
+        "Easier for men to get elected to high political offices",
+        "Easier for women to get elected to high political offices",
+        "Not much difference",
+        "Refused"
+      ],
+      "coarse_topic": "gender & sexuality",
+      "fine_topics": [
+        "gender & sexuality: gender"
+      ],
+      "axis_relevance": "social",
+      "wave": "W36"
+    },
+    {
+      "key": "COMMIMPG_W32",
+      "question": "How important is it to you, personally, to live in a community with a strong sense of community",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "COMMIMPF_W32",
+      "question": "How important is it to you, personally, to live in a community where you have family nearby",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "COMMIMPH_W32",
+      "question": "How important is it to you, personally, to live in a community where most people share your religious views",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "COMMIMPE_W32",
+      "question": "How important is it to you, personally, to live in a community with access to recreational and outdoor activities",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "HARASS2F1_W32",
+      "question": "In the long run, do you think the increased focus on sexual harassment and assault will lead to",
+      "options": [
+        "More opportunities for women in the workplace",
+        "Fewer opportunities for women in the workplace",
+        "Won't make much of a difference",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "gender & sexuality: gender",
+        "discrimination: sexual harassment"
+      ],
+      "axis_relevance": "social",
+      "wave": "W32"
+    },
+    {
+      "key": "SUCCESSIMPA_W32",
+      "question": "How important, if at all, do you think a college education is in helping a young person succeed in the world today?",
+      "options": [
+        "Essential",
+        "Important but not essential",
+        "Not important",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "SATLIFEA_W32",
+      "question": "Please tell us whether you are satisfied or dissatisfied with your family life.",
+      "options": [
+        "Very satisfied",
+        "Somewhat satisfied",
+        "Somewhat dissatisfied",
+        "Very dissatisfied",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "status in life",
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W32"
+    },
+    {
+      "key": "COMMIMPA_W32",
+      "question": "How important is it to you, personally, to live in a community with access to art, music and theater",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "COMMIMPC_W32",
+      "question": "How important is it to you, personally, to live in a community that is racially and ethnically diverse",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "COMMIMPB_W32",
+      "question": "How important is it to you, personally, to live in a community that is a good place to raise children",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "MOVEURBAN_W32",
+      "question": "If you could move to a different community, would you want to",
+      "options": [
+        "Stay in an urban area",
+        "Move to a suburban area",
+        "Move to a rural area",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "PROBRURAL_W32",
+      "question": "How well, if at all, do you think you understand the types of problems faced by people who live in rural areas?",
+      "options": [
+        "Very well",
+        "Somewhat well",
+        "Not too well",
+        "Not at all well",
+        "Refused"
+      ],
+      "coarse_topic": "community health",
+      "fine_topics": [
+        "community health"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "SOCTRUST_W32",
+      "question": "Generally speaking, would you say that",
+      "options": [
+        "Most people can be trusted",
+        "You can't be too careful in dealing with people",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W32"
+    },
+    {
+      "key": "HARASS3NOWRKF2_W41",
+      "question": "Do you think the increased focus on sexual harassment and assault has made it easier or harder for men to know how to interact with women, or hasn't it made much difference?",
+      "options": [
+        "Has made it easier for men",
+        "Has made it harder for men",
+        "Hasn't made much difference",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination: sexual harassment"
+      ],
+      "axis_relevance": "social",
+      "wave": "W41"
+    },
+    {
+      "key": "SUCCESSIMPB_W32",
+      "question": "How important, if at all, do you think knowing how to get along with people is in helping a young person succeed in the world today?",
+      "options": [
+        "Essential",
+        "Important but not essential",
+        "Not important",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W32"
+    },
+    {
+      "key": "SUCCESSIMPC_W32",
+      "question": "How important, if at all, do you think a good work ethic is in helping a young person succeed in the world today?",
+      "options": [
+        "Essential",
+        "Important but not essential",
+        "Not important",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W32"
+    },
+    {
+      "key": "SUCCESSIMPD_W32",
+      "question": "How important, if at all, do you think work skills learned on the job is in helping a young person succeed in the world today?",
+      "options": [
+        "Essential",
+        "Important but not essential",
+        "Not important",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W32"
+    },
+    {
+      "key": "FEELA_W32",
+      "question": "How often, if ever, do you feel lonely or isolated from those around you",
+      "options": [
+        "All or most of the time",
+        "Sometimes",
+        "Hardly ever",
+        "Never",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W32"
+    },
+    {
+      "key": "FEELB_W32",
+      "question": "How often, if ever, do you feel you have people you can turn to for support",
+      "options": [
+        "All or most of the time",
+        "Sometimes",
+        "Hardly ever",
+        "Never",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W32"
+    },
+    {
+      "key": "HARASS1D_W32",
+      "question": "When it comes to sexual harassment in the workplace today, how much of a problem, if at all, would you say women not being believed when they claim that they have experienced sexual harassment or assault is?",
+      "options": [
+        "Major problem",
+        "Minor problem",
+        "Not a problem",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination: sexual harassment"
+      ],
+      "axis_relevance": "social",
+      "wave": "W32"
+    },
+    {
+      "key": "MED2G_W34",
+      "question": "Thinking about medical treatments these days, how much of a problem, if at all, are the following? The process for evaluating the safety and effectiveness of new medical treatments is too slow",
+      "options": [
+        "A big problem",
+        "A small problem",
+        "Not a problem",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W34"
+    },
+    {
+      "key": "SATLIFEd_W50",
+      "question": "Please tell us whether you are satisfied or dissatisfied with your current job or career.",
+      "options": [
+        "Very satisfied",
+        "Somewhat satisfied",
+        "Somewhat dissatisfied",
+        "Very dissatisfied",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W50"
+    },
+    {
+      "key": "MED1_W34",
+      "question": "Thinking now about medicine which of these statements comes closer to your point of view, even if neither is exactly right?",
+      "options": [
+        "Medical treatments these days are worth the costs because they allow people to live longer and better quality lives",
+        "Medical treatments these days often create as many problems as they solve",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W34"
+    },
+    {
+      "key": "ABORTION_W32",
+      "question": "Do you think abortion should be",
+      "options": [
+        "legal in all or most cases",
+        "illegal in all or most cases",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: abortion"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W32"
+    },
+    {
+      "key": "IMMCOMM_W32",
+      "question": "As far as you know, how many immigrants, if any, would you say there are in your local community?",
+      "options": [
+        "Many",
+        "Some",
+        "Only a few",
+        "None",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration",
+        "community health"
+      ],
+      "axis_relevance": "social",
+      "wave": "W32"
+    },
+    {
+      "key": "IMMIMPACT_W32",
+      "question": "Thinking about the immigrants who live in your local community, in general, would you say their impact on the community has been",
+      "options": [
+        "Mostly positive",
+        "Mostly negative",
+        "Neither positive nor negative",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration",
+        "community health"
+      ],
+      "axis_relevance": "social",
+      "wave": "W32"
+    },
+    {
+      "key": "SOLVPROBeF2_W41",
+      "question": "In the future, what kind of an impact do you think state and local government will have in solving the biggest problems facing the country?",
+      "options": [
+        "A very positive impact",
+        "A somewhat positive impact",
+        "A somewhat negative impact",
+        "A very negative impact",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "SOLVPROBdF1_W41",
+      "question": "In the future, what kind of an impact do you think the government in Washington will have in solving the biggest problems facing the country?",
+      "options": [
+        "A very positive impact",
+        "A somewhat positive impact",
+        "A somewhat negative impact",
+        "A very negative impact",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "SOLVPROBc_W41",
+      "question": "In the future, what kind of an impact do you think religious groups will have in solving the biggest problems facing the country?",
+      "options": [
+        "A very positive impact",
+        "A somewhat positive impact",
+        "A somewhat negative impact",
+        "A very negative impact",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W41"
+    },
+    {
+      "key": "SOLVPROBb_W41",
+      "question": "In the future, what kind of an impact do you think major corporations will have in solving the biggest problems facing the country?",
+      "options": [
+        "A very positive impact",
+        "A somewhat positive impact",
+        "A somewhat negative impact",
+        "A very negative impact",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "POP3_W42",
+      "question": "Which of these do you think is the better way to solve the country's most pressing problems, even if neither is exactly right?",
+      "options": [
+        "Rely more on people who are considered experts about the problems, even if they don't have much practical experience",
+        "Rely more on people with practical experience with the problems, even if they aren't considered experts",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "FUTR_M_W41",
+      "question": "By 2050, do you expect that people will be",
+      "options": [
+        "More likely to get married than people are now",
+        "Less likely to get married than people are now",
+        "About as likely to get married as people are now",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future",
+        "relationships and family"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "FUTR_DIV_W41",
+      "question": "By 2050, do you expect that people who are married will be",
+      "options": [
+        "More likely to get divorced than people are now",
+        "Less likely to get divorced than people are now",
+        "About as likely to get divorced as people are now",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future",
+        "relationships and family"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "SSCUT_W41",
+      "question": "Thinking about the long-term future of Social Security, which statement comes closer to your view, even if neither is exactly right?",
+      "options": [
+        "Some reductions in benefits for future retirees will need to be made",
+        "Social Security benefits should not be reduced in any way",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "POPPROB_W41",
+      "question": "In 2050, do you think population growth in the U.S. will be a",
+      "options": [
+        "Major problem",
+        "Minor problem",
+        "Not a problem",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: current political issues/two-party",
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "ENVC_W41",
+      "question": "By the year 2050, do you think the overall condition of the environment will be",
+      "options": [
+        "Better than it is now",
+        "Worse than it is now",
+        "About the same as it is now",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future",
+        "science: climate"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "HAPPEN2h_W41",
+      "question": "How likely do you think it is that the following will happen in the next 30 years? There will be increasing violence against Jews in the U.S.",
+      "options": [
+        "Will definitely happen",
+        "Will probably happen",
+        "Will probably not happen",
+        "Will definitely not happen",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "NATDEBT_W41",
+      "question": "Which do you think is most likely to occur over the next 30 years? The national debt will",
+      "options": [
+        "Grow larger",
+        "Stay about the same",
+        "Be reduced",
+        "Be eliminated",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "WRKTRN1F2_W41",
+      "question": "Over the next 30 years, who should be most responsible for making sure young adults have the right skills and training to get a good job?",
+      "options": [
+        "Government",
+        "Employers",
+        "The education system",
+        "Individuals themselves",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "future",
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "ELDCARE_W41",
+      "question": "Thinking ahead 30 years from now, which do you think is more likely to happen? Adults ages 65 and older will be",
+      "options": [
+        "better prepared financially for retirement than older adults are today",
+        "less prepared financially for retirement than older adults today",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "SOLVPROBg_W41",
+      "question": "In the future, what kind of an impact do you think the military will have in solving the biggest problems facing the country?",
+      "options": [
+        "A very positive impact",
+        "A somewhat positive impact",
+        "A somewhat negative impact",
+        "A very negative impact",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: military",
+        "future"
+      ],
+      "axis_relevance": "social",
+      "wave": "W41"
+    },
+    {
+      "key": "AGEMAJ_W41",
+      "question": "According to the U.S. Census Bureau, by the year 2050, the number of people in the population who are 65 or older will outnumber people younger than 18. In terms of its impact on the country, do you think this will be",
+      "options": [
+        "A very good thing",
+        "A somewhat good thing",
+        "A somewhat bad thing",
+        "A very bad thing",
+        "Neither a good nor bad thing",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "SOLVPROBh_W41",
+      "question": "In the future, what kind of an impact do you think colleges and universities will have in solving the biggest problems facing the country?",
+      "options": [
+        "A very positive impact",
+        "A somewhat positive impact",
+        "A somewhat negative impact",
+        "A very negative impact",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "SOLVPROBi_W41",
+      "question": "In the future, what kind of an impact do you think public K-12 schools will have in solving the biggest problems facing the country?",
+      "options": [
+        "A very positive impact",
+        "A somewhat positive impact",
+        "A somewhat negative impact",
+        "A very negative impact",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "PQ4_F2Aa_W42",
+      "question": "Thinking about medical doctors, how often would you say they do a good job providing diagnoses and treatment recommendations",
+      "options": [
+        "All or most of the time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ4_F2Ad_W42",
+      "question": "Thinking about medical doctors, how often would you say they are transparent about potential conflicts of interest with industry groups in their work",
+      "options": [
+        "All or most of the time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ4_F2Ac_W42",
+      "question": "Thinking about medical doctors, how often would you say they admit mistakes and take responsibility for them",
+      "options": [
+        "All or most of the time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ4_F2Ab_W42",
+      "question": "Thinking about medical doctors, how often would you say they provide fair and accurate information when making recommendations",
+      "options": [
+        "All or most of the time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ4_F2Ae_W42",
+      "question": "Thinking about medical doctors, how often would you say they care about the best interests of their patients",
+      "options": [
+        "All or most of the time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ5_F2A_W42",
+      "question": "Overall, do you think professional misconduct by medical doctors is",
+      "options": [
+        "A very big problem",
+        "A moderately big problem",
+        "A small problem",
+        "Not a problem at all",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ6_F2A_W42",
+      "question": "When you hear or read news stories about professional misconduct by medical doctors, do you think of these cases as",
+      "options": [
+        "Isolated incidents",
+        "Signs of a broader problem",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ7_F2A_W42",
+      "question": "When you hear about problems with professional misconduct among medical doctors, which comes closer to your view, even if neither is exactly right?",
+      "options": [
+        "Most medical doctors have good intentions, it's the system that's broken",
+        "The system can work fine, it's the medical doctors that are the problem",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "PQ8_F2A_W42",
+      "question": "How often, if at all, do you think medical doctors face serious consequences if they engage in professional misconduct?",
+      "options": [
+        "All or most of the time",
+        "Some of the time",
+        "Only a little of the time",
+        "None of the time",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: healthcare system other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W42"
+    },
+    {
+      "key": "POP1_W42",
+      "question": "Which of these statements comes closer to your view, even if neither is exactly right?",
+      "options": [
+        "Ordinary people would do a better job solving the country's problems than elected officials",
+        "Ordinary people would do no better solving the country's problems than elected officials",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: current political issues/two-party"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "POP2_W42",
+      "question": "In general, do you think most of the important policy decisions in this country are made with",
+      "options": [
+        "A great deal of concern for how the policies affect people like you",
+        "Some concern for how the policies affect people like you",
+        "Not too much concern for how the policies affect people like you",
+        "No concern at all for how the policies affect people like you",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: current political issues/two-party"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "COLSPEECH_W36",
+      "question": "Thinking again about colleges and universities which of the following do you think should be more important on college campuses these days?",
+      "options": [
+        "Allowing people to speak their minds freely, even if some students find their views upsetting or offensive",
+        "Ensuring that students aren't exposed to views they find upsetting or offensive, even if that limits what people are a",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W36"
+    },
+    {
+      "key": "HARASS1NOWRKF2d_W41",
+      "question": "When it comes to sexual harassment and sexual assault today, how much of a problem, if at all, would you say women not being believed when they claim that they have experienced sexual harassment or assault is?",
+      "options": [
+        "Major problem",
+        "Minor problem",
+        "Not a problem",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination: sexual harassment"
+      ],
+      "axis_relevance": "social",
+      "wave": "W41"
+    },
+    {
+      "key": "GOVPRIOoF2_W41",
+      "question": "If you were deciding what the federal government should do to improve the quality of life for future generations, what priority would you give to dealing with climate change?",
+      "options": [
+        "A top priority",
+        "An important, but not a top priority",
+        "A lower priority",
+        "Should not be done",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "WRKTRN1F1_W41",
+      "question": "Over the next 30 years, who should be most responsible for making sure American workers have the right skills and training to get a good job?",
+      "options": [
+        "Government",
+        "Employers",
+        "The education system",
+        "Individuals themselves",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "future",
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "JOBBENEFITS_W41",
+      "question": "Over the next 30 years, will the average working person in this country have employee benefits, such as health insurance, paid vacations and retirement plans that are",
+      "options": [
+        "Better than they are now",
+        "Not as good as they are now",
+        "About the same as they are now",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "HARASS1F1d_W41",
+      "question": "When it comes to sexual harassment and sexual assault in the workplace today, how much of a problem, if at all, would you say women not being believed when they claim that they have experienced sexual harassment or ass is?",
+      "options": [
+        "Major problem",
+        "Minor problem",
+        "Not a problem",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination: sexual harassment"
+      ],
+      "axis_relevance": "social",
+      "wave": "W41"
+    },
+    {
+      "key": "HAPPENj_W41",
+      "question": "Still thinking ahead 30 years, which do you think is more likely to happen in the U.S.? The country will be more/less politically divided",
+      "options": [
+        "The country will be more politically divided",
+        "The country will be less politically divided",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "AVGFAM_W41",
+      "question": "Over the next 30 years, do you think that the average American family will see its standard of living",
+      "options": [
+        "Get better",
+        "Stay about the same",
+        "Get worse",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "future"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "ELDFINANCEF2_W41",
+      "question": "Who do you think should be mostly responsible for paying for the long-term care older Americans may need?",
+      "options": [
+        "Family members",
+        "Government",
+        "Older Americans themselves",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: government control"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "ROBWRK2_W41",
+      "question": "If robots and computers do much of the work currently done by humans, do you think this would be",
+      "options": [
+        "A very good thing for the country",
+        "A somewhat good thing for the country",
+        "A somewhat bad thing for the country",
+        "A very bad thing for the country",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: robots"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "ROBWRK_W41",
+      "question": "Overall, how likely do you think it is that 30 years from now robots and computers will do much of the work currently done by humans? Do you think this will",
+      "options": [
+        "Definitely happen",
+        "Probably happen",
+        "Probably not happen",
+        "Definitely not happen",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: robots"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "AUTOLKLY_W41",
+      "question": "Within the next 30 years, how likely do you think it is that the type of work that you do will be done by robots or computers? Do you think this will",
+      "options": [
+        "Definitely happen",
+        "Probably happen",
+        "Probably not happen",
+        "Definitely not happen",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: robots"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "ROBIMPACTb_W41",
+      "question": "If robots and computers perform most of the jobs currently being done by humans, do you think it is likely or not that the economy would create many new, better-paying jobs for humans",
+      "options": [
+        "Yes, likely",
+        "No, not likely",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: robots"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W41"
+    },
+    {
+      "key": "OPTIMIST_W41",
+      "question": "Please think about what things will be like in 2050, about 30 years from now. Thinking about the future of the United States, would you say you are",
+      "options": [
+        "Very optimistic",
+        "Somewhat optimistic",
+        "Somewhat pessimistic",
+        "Very pessimistic",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: current political issues/two-party",
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W41"
+    },
+    {
+      "key": "GAP21Q14_W82",
+      "question": "And how confident are you that America's political system can be changed effectively?",
+      "options": [
+        "Very confident",
+        "Somewhat confident",
+        "Not too confident",
+        "Not at all confident",
+        "Refused"
+      ],
+      "coarse_topic": "political issues",
+      "fine_topics": [
+        "political issues: current political issues/two-party"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q4_a_W82",
+      "question": "Do you have a favorable or unfavorable opinion of the United States",
+      "options": [
+        "Very favorable",
+        "Somewhat favorable",
+        "Somewhat unfavorable",
+        "Very unfavorable",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q4_f_W82",
+      "question": "Do you have a favorable or unfavorable opinion of nato, that is, North Atlantic Treaty Organization",
+      "options": [
+        "Very favorable",
+        "Somewhat favorable",
+        "Somewhat unfavorable",
+        "Very unfavorable",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q4_b_W82",
+      "question": "Do you have a favorable or unfavorable opinion of China",
+      "options": [
+        "Very favorable",
+        "Somewhat favorable",
+        "Somewhat unfavorable",
+        "Very unfavorable",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q4_c_W82",
+      "question": "Do you have a favorable or unfavorable opinion of Germany",
+      "options": [
+        "Very favorable",
+        "Somewhat favorable",
+        "Somewhat unfavorable",
+        "Very unfavorable",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q4_d_W82",
+      "question": "Do you have a favorable or unfavorable opinion of the European Union",
+      "options": [
+        "Very favorable",
+        "Somewhat favorable",
+        "Somewhat unfavorable",
+        "Very unfavorable",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q19_c_W82",
+      "question": "How much confidence do you have in russian President Vladimir Putin to do the right thing regarding world affairs?",
+      "options": [
+        "A lot of confidence",
+        "Some confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q19_d_W82",
+      "question": "How much confidence do you have in german Chancellor Angela Merkel to do the right thing regarding world affairs?",
+      "options": [
+        "A lot of confidence",
+        "Some confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q19_b_W82",
+      "question": "How much confidence do you have in chinese President Xi Jinping to do the right thing regarding world affairs?",
+      "options": [
+        "A lot of confidence",
+        "Some confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q19_e_W82",
+      "question": "How much confidence do you have in french President Emmanuel Macron to do the right thing regarding world affairs?",
+      "options": [
+        "A lot of confidence",
+        "Some confidence",
+        "Not too much confidence",
+        "No confidence at all",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q17_W82",
+      "question": "In making international policy decisions, to what extent, if at all, do you think the US takes into account the interests of other countries around the world?",
+      "options": [
+        "A great deal",
+        "A fair amount",
+        "Not too much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q18_W82",
+      "question": "Which statement comes closer to your view, even if neither is exactly right? The US should",
+      "options": [
+        "Try to promote human rights in China, even if it harms economic relations with China",
+        "Prioritize strengthening economic relations with China, even if it means not addressing human rights issues",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "INEQ8_j_W54",
+      "question": "How much, if at all, do you think the following proposals would do to reduce economic inequality in the U.S.? Breaking up large corporations",
+      "options": [
+        "A great deal",
+        "A fair amount",
+        "Not too much",
+        "Nothing at all",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "INEQ9_W54",
+      "question": "In order to address economic inequality in this country, do you think it would be better for the government to",
+      "options": [
+        "Give direct assistance to people who are poor in the form of cash payments or tax credits",
+        "Invest in education and job training programs for people who are poor",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "political issues: government control"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "INEQ11_W54",
+      "question": "In order to address economic inequality in this country, do you think the government",
+      "options": [
+        "Should raise taxes on people like you",
+        "Should not raise taxes on people like you",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality",
+        "political issues: government control"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "ECIMPa_W54",
+      "question": "How much power and influence do you think politicians have on today's economy?",
+      "options": [
+        "Too much power and influence",
+        "Not enough power and influence",
+        "About the right amount",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership",
+        "economy and inequality"
+      ],
+      "axis_relevance": "both",
+      "wave": "W54"
+    },
+    {
+      "key": "INEQ5_j_W54",
+      "question": "How much, if at all, do you think problems with our educational system contributes to economic inequality in this country?",
+      "options": [
+        "Contributes a great deal",
+        "Contributes a fair amount",
+        "Contributes not too much",
+        "Contributes not at all",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education",
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "ECIMPb_W54",
+      "question": "How much power and influence do you think technology companies have on today's economy?",
+      "options": [
+        "Too much power and influence",
+        "Not enough power and influence",
+        "About the right amount",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "INEQ6_W54",
+      "question": "Thinking about children growing up in this country these days, how much, if at all, do you think their family's financial situation impacts their ability to succeed in life?",
+      "options": [
+        "A great deal",
+        "A fair amount",
+        "Not too much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "INEQ5_l_W54",
+      "question": "How much, if at all, do you think the growing number of illegal immigrants working in the U.S. contributes to economic inequality in this country?",
+      "options": [
+        "Contributes a great deal",
+        "Contributes a fair amount",
+        "Contributes not too much",
+        "Contributes not at all",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration",
+        "economy and inequality"
+      ],
+      "axis_relevance": "social",
+      "wave": "W54"
+    },
+    {
+      "key": "INEQ5_m_W54",
+      "question": "How much, if at all, do you think the growing number of legal immigrants working in the U.S. contributes to economic inequality in this country?",
+      "options": [
+        "Contributes a great deal",
+        "Contributes a fair amount",
+        "Contributes not too much",
+        "Contributes not at all",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration",
+        "economy and inequality"
+      ],
+      "axis_relevance": "social",
+      "wave": "W54"
+    },
+    {
+      "key": "GAP21Q7_d_W82",
+      "question": "Would you say the World Health Organization, or WHO has done a good or bad job dealing with the coronavirus outbreak?",
+      "options": [
+        "Very good",
+        "Somewhat good",
+        "Somewhat bad",
+        "Very bad",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q7_c_W82",
+      "question": "Would you say the European Union has done a good or bad job dealing with the coronavirus outbreak?",
+      "options": [
+        "Very good",
+        "Somewhat good",
+        "Somewhat bad",
+        "Very bad",
+        "Refused"
+      ],
+      "coarse_topic": "global attitudes and foreign policy",
+      "fine_topics": [
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "ECON5_k_W54",
+      "question": "Do you think the country's current economic conditions are helping or hurting people with college degrees?",
+      "options": [
+        "Helping a lot",
+        "Helping a little",
+        "Hurting a little",
+        "Hurting a lot",
+        "Neither helping nor hurting",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "GAP21Q7_a_W82",
+      "question": "Would you say the US has done a good or bad job dealing with the coronavirus outbreak?",
+      "options": [
+        "Very good",
+        "Somewhat good",
+        "Somewhat bad",
+        "Very bad",
+        "Refused"
+      ],
+      "coarse_topic": "healthcare system",
+      "fine_topics": [
+        "healthcare system: covid"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W82"
+    },
+    {
+      "key": "ECON5_c_W54",
+      "question": "Do you think the country's current economic conditions are helping or hurting the middle class?",
+      "options": [
+        "Helping a lot",
+        "Helping a little",
+        "Hurting a little",
+        "Hurting a lot",
+        "Neither helping nor hurting",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "ECON5_e_W54",
+      "question": "Do you think the country's current economic conditions are helping or hurting older adults?",
+      "options": [
+        "Helping a lot",
+        "Helping a little",
+        "Hurting a little",
+        "Hurting a lot",
+        "Neither helping nor hurting",
+        "Refused"
+      ],
+      "coarse_topic": "economy and inequality",
+      "fine_topics": [
+        "economy and inequality"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "HAVEKIDS1_W50",
+      "question": "Thinking about the future, how likely, if at all, is it that you will have children someday?",
+      "options": [
+        "Very likely",
+        "Somewhat likely",
+        "Not too likely",
+        "Not at all likely",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "FAMSURV38a_W50",
+      "question": "For household chores and responsibilities, who would you say does more?",
+      "options": [
+        "You do more than your spouse/partner",
+        "Your spouse/partner does more than you",
+        "Both about equally",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "FAMSURV37_W50",
+      "question": "Looking ahead, would having children make it",
+      "options": [
+        "Easier to advance in your job or career",
+        "Harder to advance in your job or career",
+        "Would not make a difference",
+        "Refused"
+      ],
+      "coarse_topic": "relationships and family",
+      "fine_topics": [
+        "relationships and family"
+      ],
+      "axis_relevance": "social",
+      "wave": "W50"
+    },
+    {
+      "key": "JOBTRAIN_W54",
+      "question": "Looking ahead, how important do you think it will be for you to get training and develop new skills throughout your work life in order to keep up with changes in the workplace?",
+      "options": [
+        "Essential",
+        "Important, but not essential",
+        "Not important",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W54"
+    },
+    {
+      "key": "GOVPRIORITYf_W54",
+      "question": "How much of a priority should the following be for the federal government to address: Reducing gun violence",
+      "options": [
+        "A top priority",
+        "Important, but lower priority",
+        "Not too important",
+        "Should not be done",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: terrorism",
+        "political issues: government control"
+      ],
+      "axis_relevance": "social",
+      "wave": "W54"
+    },
+    {
+      "key": "GAP21Q46_W82",
+      "question": "Do you think it's good or bad for US colleges and universities to accept international students?",
+      "options": [
+        "Good",
+        "Bad",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q33_t_W82",
+      "question": "Thinking about long-range foreign policy goals, how much priority, if any, do you think limiting the power and influence of North Korea should be given?",
+      "options": [
+        "Top priority",
+        "Some priority",
+        "No priority",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: terrorism",
+        "global attitudes and foreign policy"
+      ],
+      "axis_relevance": "social",
+      "wave": "W82"
+    },
+    {
+      "key": "CRIM_SENT2_W92",
+      "question": "Overall, would you say people who are convicted of crimes in this country serve",
+      "options": [
+        "Too much time in prison",
+        "Too little time in prison",
+        "About the right amount of time in prison",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: justice system"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "GODMORALIMP_W92",
+      "question": "Regardless of your own religious beliefs, how important, if at all, do you think it is for a person to believe in God in order to be considered good and moral?",
+      "options": [
+        "Essential",
+        "Important, but not essential",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career",
+        "self-perception and values",
+        "religion"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W92"
+    },
+    {
+      "key": "UNIMMIGCOMM_W92",
+      "question": "When it comes to people who have immigrated to the U.S illegally, do you think they generally make the communities they live in",
+      "options": [
+        "A lot better",
+        "A little better",
+        "A little worse",
+        "A lot worse",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "CANDEXP_W92",
+      "question": "How important is it, if at all, that candidates running for high levels of political office have prior government experience?",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "LEGALIMMIGAMT_W92",
+      "question": "Do you think the number of legal immigrants the U.S. admits should",
+      "options": [
+        "Increase a lot",
+        "Increase a little",
+        "Stay about the same",
+        "Decrease a little",
+        "Decrease a lot",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "WORRYF_W26",
+      "question": "How much, if at all, do you worry about the following happening to you? Being the victim of a mass shooting",
+      "options": [
+        "Worry a lot",
+        "Worry a little",
+        "Do not worry at all",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: crime"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "WORRYC_W26",
+      "question": "How much, if at all, do you worry about the following happening to you? Losing your job",
+      "options": [
+        "Worry a lot",
+        "Worry a little",
+        "Do not worry at all",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W26"
+    },
+    {
+      "key": "GUNSAFE2_W26",
+      "question": "Would having a gun in your household make you feel",
+      "options": [
+        "Safer than you feel without a gun in your household",
+        "Less safe than you feel without a gun in your household",
+        "No more or less safe",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: guns"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "GUNCONTRIBA_W26",
+      "question": "How much, if at all, do you think the ease with which people can legally obtain guns contributes to gun violence in the country today?",
+      "options": [
+        "A great deal",
+        "A fair amount",
+        "Not too much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: guns"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "WORRYA_W26",
+      "question": "How much, if at all, do you worry about the following happening to you? Having your home broken into",
+      "options": [
+        "Worry a lot",
+        "Worry a little",
+        "Do not worry at all",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: crime"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "CANQUALPOL_W92",
+      "question": "In general, would you say the quality of the candidates running for political office in the last several years has been",
+      "options": [
+        "Very good",
+        "Somewhat good",
+        "Somewhat bad",
+        "Very bad",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "SOCIETY_GUNS_W92",
+      "question": "Do you think an increase in the number of guns in the U.S. is generally good or bad for our society?",
+      "options": [
+        "Very good for society",
+        "Somewhat good for society",
+        "Neither good nor bad for society",
+        "Somewhat bad for society",
+        "Very bad for society",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: guns"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "PROBOFF_a_W92",
+      "question": "How much of a problem, if any, would you say people being too easily offended by things others say is in the country today?",
+      "options": [
+        "Major problem",
+        "Minor problem",
+        "Not a problem",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination: other"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "SOCIETY_JBCLL_W92",
+      "question": "Do you think good-paying jobs requiring a college degree more often than they used to is generally good or bad for our society?",
+      "options": [
+        "Very good for society",
+        "Somewhat good for society",
+        "Neither good nor bad for society",
+        "Somewhat bad for society",
+        "Very bad for society",
+        "Refused"
+      ],
+      "coarse_topic": "education",
+      "fine_topics": [
+        "education",
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W92"
+    },
+    {
+      "key": "SOCIETY_RELG_W92",
+      "question": "Do you think a decline in the share of Americans belonging to an organized religion is generally good or bad for our society?",
+      "options": [
+        "Very good for society",
+        "Somewhat good for society",
+        "Neither good nor bad for society",
+        "Somewhat bad for society",
+        "Very bad for society",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "INSTN_MSCENT_W92",
+      "question": "Is the entertainment industry having a positive or negative effect on the way things are going in the country these days?",
+      "options": [
+        "Positive effect",
+        "Negative effect",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W92"
+    },
+    {
+      "key": "INSTN_LGECRP_W92",
+      "question": "Are large corporations having a positive or negative effect on the way things are going in the country these days?",
+      "options": [
+        "Positive effect",
+        "Negative effect",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W92"
+    },
+    {
+      "key": "INSTN_TECHCMP_W92",
+      "question": "Are technology companies having a positive or negative effect on the way things are going in the country these days?",
+      "options": [
+        "Positive effect",
+        "Negative effect",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W92"
+    },
+    {
+      "key": "LIFEFIFTY_W92",
+      "question": "In general, would you say life in America today is better, worse, or about the same as it was 50 years ago for people like you?",
+      "options": [
+        "Better",
+        "Worse",
+        "About the same",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "INSTN_CHR_W92",
+      "question": "Are churches and religious organizations having a positive or negative effect on the way things are going in the country these days?",
+      "options": [
+        "Positive effect",
+        "Negative effect",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "NOCARRYGUN_W26",
+      "question": "And would you say you never carry a handgun or pistol because you don't want to or for some other reason?",
+      "options": [
+        "Don't want to carry",
+        "Some other reason",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: guns"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "CARRYGUN_W26",
+      "question": "How often, if ever, do you carry a handgun or pistol outside your home, not including times when you are transporting it?",
+      "options": [
+        "All of the time",
+        "Most of the time",
+        "Only some of the time",
+        "Never",
+        "Refused"
+      ],
+      "coarse_topic": "crime/security",
+      "fine_topics": [
+        "crime/security: guns"
+      ],
+      "axis_relevance": "social",
+      "wave": "W26"
+    },
+    {
+      "key": "POLICY3MOD_W92",
+      "question": "In general, would you say experts who study a subject for many years are",
+      "options": [
+        "Usually better at making good policy decisions about that subject than other people",
+        "Usually worse at making good policy decisions about that subject than other people",
+        "neither better nor worse at making good policy decisions about that subject than other people",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership",
+        "community health"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "INSTN_BNKS_W92",
+      "question": "Are banks and other financial institutions having a positive or negative effect on the way things are going in the country these days?",
+      "options": [
+        "Positive effect",
+        "Negative effect",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: other"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W92"
+    },
+    {
+      "key": "IL_IMM_PRI_W92",
+      "question": "What should be the priority for dealing with illegal immigration in the U.S.?",
+      "options": [
+        "Better border security and stronger enforcement of our immigration laws",
+        "Creating a way for immigrants already here illegally to become citizens if they meet certain requirements",
+        "Both should be given equal priority",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "FAMSURV1_W50",
+      "question": "At this point in your life, which of the following would be best for you personally?",
+      "options": [
+        "Working full-time for pay",
+        "Working part-time for pay",
+        "Not working for pay at all",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W50"
+    },
+    {
+      "key": "CAREREL_W27",
+      "question": "How likely is it that, at some point in your life, you will be responsible for caring for an aging parent or family member?",
+      "options": [
+        "Very likely",
+        "Somewhat likely",
+        "Not too likely",
+        "Not at all likely",
+        "I am already doing this",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W27"
+    },
+    {
+      "key": "CARS1_W27",
+      "question": "How much have you seen or heard about the effort to develop driverless vehicles - that is, cars and trucks that can operate on their own without a human driver?",
+      "options": [
+        "A lot",
+        "A little",
+        "Nothing at all",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: autonomous vehicles"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "CARS2_W27",
+      "question": "Has what you've seen or heard about driverless vehicles been mostly positive, mostly negative, or a mix of both?",
+      "options": [
+        "Mostly positive",
+        "Mostly negative",
+        "A mix of both",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: autonomous vehicles"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "CARS5_W27",
+      "question": "Would you, personally, want to ride in a driverless vehicle if you had the opportunity?",
+      "options": [
+        "Yes",
+        "No",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: autonomous vehicles"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "CARS7A_W27",
+      "question": "How safe would you feel sharing the road with a driverless passenger vehicle?",
+      "options": [
+        "Very safe",
+        "Somewhat safe",
+        "Not too safe",
+        "Not safe at all",
+        "Refused"
+      ],
+      "coarse_topic": "corporations, banks, technology and automation",
+      "fine_topics": [
+        "corporations, banks, technology and automation: autonomous vehicles"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "WORK2_W27",
+      "question": "On a different subject, would you say that society generally places too much importance on working and having a job, not enough importance on working and having a job, or is it just about right?",
+      "options": [
+        "Too much importance",
+        "Not enough importance",
+        "Just about right",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "RELIG_GOV_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Religion should be kept separate from government policies",
+        "Government policies should support religious values and beliefs",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "GOODEVIL_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Most things in society can be pretty clearly divided into good and evil",
+        "Most things in society are too complicated to be clearly divided between good and evil",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "SOCIETY_SSM_W92",
+      "question": "Do you think same-sex marriages being legal in the U.S. is generally good or bad for our society?",
+      "options": [
+        "Very good for society",
+        "Somewhat good for society",
+        "Neither good nor bad for society",
+        "Somewhat bad for society",
+        "Very bad for society",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "MARRFAM_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Society is better off if people make marriage and having children a priority",
+        "Society is just as well off if people have priorities other than marriage and children",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "USEXCEPT_W92",
+      "question": "Which of these statements best describes your opinion about the United States?",
+      "options": [
+        "The U.S. stands above all other countries in the world",
+        "The U.S. is one of the greatest countries in the world, along with some others",
+        "There are other countries that are better than the U.S.",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "COMPROMISEVAL_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Compromise in politics is really just selling out on what you believe in",
+        "Compromise is how things get done in politics, even though it sometimes means sacrificing your beliefs",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "GOVWASTE_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Government is almost always wasteful and inefficient",
+        "Government often does a better job than people give it credit for",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "CNTRYFAIR_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Other countries generally treat the United States about as fairly as we treat them",
+        "Other countries often take unfair advantage of the United States",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "PPLRESP_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "People like me just don't get the respect we deserve in this country",
+        "People like me generally get the respect we deserve in this country",
+        "Refused"
+      ],
+      "coarse_topic": "religion",
+      "fine_topics": [
+        "religion"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "RACESURV52MOD_W92",
+      "question": "How much, if at all, would it bother you to regularly hear people speak a language other than English in public places in your community?",
+      "options": [
+        "A lot",
+        "Some",
+        "Not much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "OPENIDEN_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "America's openness to people from all over the world is essential to who we are as a nation",
+        "If America is too open to people from all over the world, we risk losing our identity as a nation",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "GOVPRIORITYb_W54",
+      "question": "How much of a priority should the following be for the federal government to address: Reducing illegal immigration",
+      "options": [
+        "A top priority",
+        "Important, but lower priority",
+        "Not too important",
+        "Should not be done",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W54"
+    },
+    {
+      "key": "GAP21Q33_g_W82",
+      "question": "Thinking about long-range foreign policy goals, how much priority, if any, do you think reducing illegal immigration into the US should be given?",
+      "options": [
+        "Top priority",
+        "Some priority",
+        "No priority",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q33_s_W82",
+      "question": "Thinking about long-range foreign policy goals, how much priority, if any, do you think reducing legal immigrations into the US should be given?",
+      "options": [
+        "Top priority",
+        "Some priority",
+        "No priority",
+        "Refused"
+      ],
+      "coarse_topic": "immigration",
+      "fine_topics": [
+        "immigration"
+      ],
+      "axis_relevance": "social",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q2_W82",
+      "question": "When children today in the US grow up, do you think they will be",
+      "options": [
+        "Better off financially than their parents",
+        "Worse off financially than their parents",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q24_W82",
+      "question": "How concerned are you, if at all, that global climate change will harm you personally at some point in your lifetime?",
+      "options": [
+        "Very concerned",
+        "Somewhat concerned",
+        "Not too concerned",
+        "Not at all concerned",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q27_W82",
+      "question": "Do you think actions taken by the international community to address global climate change, such as the Paris climate agreement, will mostly",
+      "options": [
+        "Benefit America's economy",
+        "Harm America's economy",
+        "Have no impact on America's economy",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q28_W82",
+      "question": "How confident are you, if at all, that the actions taken by the international community will significantly reduce the effects of global climate change?",
+      "options": [
+        "Very confident",
+        "Somewhat confident",
+        "Not too confident",
+        "Not at all confident",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "FUTURE_W42",
+      "question": "Looking ahead to the next twenty years, do you think developments in science will make people's lives",
+      "options": [
+        "Better",
+        "Worse",
+        "About the same",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "PAST_W42",
+      "question": "Compared with twenty years ago, do you think developments in science have made people's lives",
+      "options": [
+        "Better",
+        "Worse",
+        "About the same",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W42"
+    },
+    {
+      "key": "GAP21Q9_W82",
+      "question": "Thinking about the US as a whole, do you think this country is now",
+      "options": [
+        "More united than before the coronavirus outbreak",
+        "More divided than before the coronavirus outbreak",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q11_W82",
+      "question": "Which statement comes closer to your view, even if neither is exactly right? America's economy is",
+      "options": [
+        "Recovering from the effects of the coronavirus outbreak in ways that show the strengths of its economic system",
+        "Failing to recover from the effects of the coronavirus outbreak in ways that show the weaknesses of its economic system",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "SUPERPWR_W92",
+      "question": "In the future, do you think",
+      "options": [
+        "U.S. policies should try to keep it so America is the only military superpower",
+        "It would be acceptable if another country became as militarily powerful as the U.S.",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "PREDICTA_W27",
+      "question": "Do you think the following will or will not happen in the next 20 years? Doctors will rely on computer programs to diagnose most diseases and determine treatments",
+      "options": [
+        "Will definitely happen",
+        "Will probably happen",
+        "Will probably not happen",
+        "Will definitely not happen",
+        "Refused"
+      ],
+      "coarse_topic": "future",
+      "fine_topics": [
+        "future"
+      ],
+      "axis_relevance": "both",
+      "wave": "W27"
+    },
+    {
+      "key": "ECONFAIR_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "The economic system in this country unfairly favors powerful interests",
+        "The economic system in this country is generally fair to most Americans",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "WOMENOBS_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "The obstacles that once made it harder for women than men to get ahead are now largely gone",
+        "There are still significant obstacles that make it harder for women to get ahead than men",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "BUSPROFIT_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Business corporations make too much profit",
+        "Most corporations make a fair and reasonable amount of profit",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "GOVPROTCT_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "It's not the government's job to protect people from themselves",
+        "Sometimes laws to protect people from themselves are necessary",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "GOVAID_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Government aid to the poor does more harm than good, by making people too dependent on government assistance",
+        "Government aid to the poor does more good than harm, because people can't get out of poverty until their basic needs are",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "POORASSIST_W92",
+      "question": "Thinking about assistance the government provides to people in need, do you think the government",
+      "options": [
+        "Should provide more assistance",
+        "Should provide less assistance",
+        "Is providing about the right amount of assistance",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "ELITEUNDMOD_W92",
+      "question": "In general, do you think people in influential and powerful positions throughout our society understand the challenges people like you face in their daily lives",
+      "options": [
+        "Very well",
+        "Somewhat well",
+        "Not too well",
+        "Not at all well",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "VTRGHTPRIV1_W92",
+      "question": "Please choose the statement that comes closer to your own views.",
+      "options": [
+        "Voting is a fundamental right for every adult U.S. citizen and should not be restricted in any way",
+        "Voting is a privilege that comes with responsibilities and can be limited if adult U.S. citizens don't meet some require",
+        "Refused"
+      ],
+      "coarse_topic": "self-perception and values",
+      "fine_topics": [
+        "self-perception and values"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "ROBJOB5D_W27",
+      "question": "Would you favor or oppose the following? If the federal government created a national service program that paid people to perform tasks even if a robot or computer could do those tasks faster or cheaper",
+      "options": [
+        "Strongly favor",
+        "Favor",
+        "Oppose",
+        "Strongly oppose",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "ROBJOB6_W27",
+      "question": "Which of the following statements best describes how you feel, even if neither is exactly right?",
+      "options": [
+        "The government would have an obligation to take care of people whose jobs are displaced by robots and computers",
+        "Individuals would have an obligation to take care of their own financial well-being, even if robots and computers",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "ROBJOB7_W27",
+      "question": "Which of the following statements best describes how you feel, even if neither is exactly right?",
+      "options": [
+        "If businesses can receive better work at lower cost by replacing humans with robots and computers, they are justified",
+        "There should be limits on how many jobs businesses can replace with robots and computers, even if they can do those",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "WORK4A_W27",
+      "question": "Thinking about how demanding your work is, has technology generally made your work",
+      "options": [
+        "More demanding",
+        "Less demanding",
+        "No impact either way",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "WORK4B_W27",
+      "question": "Thinking about how interesting your work is, has technology generally made your work",
+      "options": [
+        "More interesting",
+        "Less interesting",
+        "No impact either way",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "WORK4C_W27",
+      "question": "Thinking about opportunities for advancement in your career, do you feel that technology has",
+      "options": [
+        "Increased your opportunities",
+        "Decreased your opportunities",
+        "No impact either way",
+        "Refused"
+      ],
+      "coarse_topic": "job/career",
+      "fine_topics": [
+        "job/career"
+      ],
+      "axis_relevance": "economic",
+      "wave": "W27"
+    },
+    {
+      "key": "CANMTCHPOL_W92",
+      "question": "I usually feel like",
+      "options": [
+        "There is at least one candidate who shares most of my views",
+        "None of the candidates represent my views well",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "REPRSNTREP_W92",
+      "question": "How well does the Republican party represent the interests of people like you?",
+      "options": [
+        "Very well",
+        "Somewhat well",
+        "Not too well",
+        "Not at all well",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "REPRSNTDEM_W92",
+      "question": "How well does the Democratic party represent the interests of people like you?",
+      "options": [
+        "Very well",
+        "Somewhat well",
+        "Not too well",
+        "Not at all well",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W92"
+    },
+    {
+      "key": "GAP21Q29_W82",
+      "question": "What kind of leadership role should the US play in the world? It should",
+      "options": [
+        "Be the single world leader",
+        "Play a shared leadership role",
+        "Not play any leadership role",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q30_W82",
+      "question": "Should the US be the most active of the leading nations, or should it be about as active as other leading nations?",
+      "options": [
+        "Most active",
+        "About as active",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q31_W82",
+      "question": "How important, if at all, is it that the US is generally respected by other countries around the world?",
+      "options": [
+        "Very important",
+        "Somewhat important",
+        "Not too important",
+        "Not at all important",
+        "Refused"
+      ],
+      "coarse_topic": "leadership",
+      "fine_topics": [
+        "leadership"
+      ],
+      "axis_relevance": "both",
+      "wave": "W82"
+    },
+    {
+      "key": "PROG_RRETRO_W92",
+      "question": "How much progress, if any, do you think the country has made over the last 50 years toward ensuring equal rights for all Americans regardless of their racial or ethnic backgrounds?",
+      "options": [
+        "A lot",
+        "A little",
+        "None at all",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "PROG_RNEED_W92",
+      "question": "How much more, if anything, needs to be done to ensure equal rights for all Americans regardless of their racial or ethnic backgrounds?",
+      "options": [
+        "A lot",
+        "A little",
+        "Nothing at all",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "PROG_RNEED2b_W92",
+      "question": "Which comes closer to your view about what needs to be done to ensure equal rights for all Americans regardless of their racial or ethnic backgrounds?",
+      "options": [
+        "Most U.S. laws and major institutions need to be completely rebuilt because they are fundamentally biased against some r",
+        "While there are many inequities in U.S. laws and institutions, necessary changes can be made by working within the curre",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "WHADVANT_W92",
+      "question": "In general, how much do White people benefit from advantages in society that Black people do not have?",
+      "options": [
+        "A great deal",
+        "A fair amount",
+        "Not too much",
+        "Not at all",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "SOCIETY_RHIST_W92",
+      "question": "Do you think increased public attention to the history of slavery and racism in America is generally good or bad for our society?",
+      "options": [
+        "Very good for society",
+        "Somewhat good for society",
+        "Neither good nor bad for society",
+        "Somewhat bad for society",
+        "Very bad for society",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "SOCIETY_WHT_W92",
+      "question": "Do you think white people declining as a share of the U.S. population is generally good or bad for our society?",
+      "options": [
+        "Very good for society",
+        "Somewhat good for society",
+        "Neither good nor bad for society",
+        "Somewhat bad for society",
+        "Very bad for society",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W92"
+    },
+    {
+      "key": "GAP21Q23_W82",
+      "question": "In the US, do you think discrimination against people based on their race or ethnicity is a",
+      "options": [
+        "Very serious problem",
+        "Somewhat serious problem",
+        "Not too serious problem",
+        "Not a problem at all",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W82"
+    },
+    {
+      "key": "GAP21Q20_W82",
+      "question": "Overall, do you think having people of many different backgrounds, such as different ethnic groups, religions and races, makes the US",
+      "options": [
+        "A better place to live",
+        "A worse place to live",
+        "Refused"
+      ],
+      "coarse_topic": "discrimination",
+      "fine_topics": [
+        "discrimination"
+      ],
+      "axis_relevance": "social",
+      "wave": "W82"
+    }
+  ]
+}

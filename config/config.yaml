@@ -204,7 +204,7 @@ quadrant_dataset:
 
   # Paths (relative to project root)
   normalized_dir:    data/experts/raw/normalized
-  output_dir:        data/experts/quadrant_pools
+  output_dir:        data/experts/quadrant-pools
   econ_vectors_path: data/steering-vectors/vectors/economic_vectors.pt
   soc_vectors_path:  data/steering-vectors/vectors/social_vectors.pt
 
@@ -223,9 +223,9 @@ quadrant_dataset:
   # Scores are cosine similarities between chunk embedding and steering vector.
   # Tune these after inspecting scored_chunks.jsonl score distributions.
   thresholds:
-    min_abs_econ:           0.10
-    min_abs_soc:            0.10
-    min_confidence_margin:  0.10
+    min_abs_econ:           0.0
+    min_abs_soc:            0.0
+    min_confidence_margin:  0.015
 
   # Number of HoC speeches to keep (stratified by decade × party).
   # Set to null to process all 1.6M speeches (takes ~30h on A100).

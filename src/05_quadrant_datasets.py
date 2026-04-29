@@ -637,18 +637,18 @@ def quadrant_from_scores(score_econ: float, score_soc: float) -> str:
         soc   positive = authoritarian, negative = libertarian
 
     Quadrant mapping:
-        q1 = left-libertarian   (econ < 0, soc < 0)
-        q2 = left-authoritarian (econ < 0, soc >= 0)
-        q3 = right-libertarian  (econ >= 0, soc < 0)
-        q4 = right-authoritarian(econ >= 0, soc >= 0)
+        right_auth = econ_right + authoritarian (econ >= 0, soc >= 0)
+        left_auth  = econ_left  + authoritarian (econ < 0,  soc >= 0)
+        left_lib   = econ_left  + libertarian   (econ < 0,  soc < 0)
+        right_lib  = econ_right + libertarian   (econ >= 0, soc < 0)
     """
-    if score_econ < 0 and score_soc < 0:
-        return "q1"
+    if score_econ >= 0 and score_soc >= 0:
+        return "right_auth"
     if score_econ < 0 and score_soc >= 0:
-        return "q2"
-    if score_econ >= 0 and score_soc < 0:
-        return "q3"
-    return "q4"
+        return "left_auth"
+    if score_econ < 0 and score_soc < 0:
+        return "left_lib"
+    return "right_lib"
 
 
 def compute_confidence_margin(score_econ: float, score_soc: float) -> float:
@@ -992,7 +992,7 @@ def main() -> None:
 
     retained_groups = retained_by_quadrant(scored_chunks)
 
-    for quadrant in ["q1", "q2", "q3", "q4"]:
+    for quadrant in ["right_auth", "left_auth", "left_lib", "right_lib"]:
         quadrant_dir  = config.output_dir / quadrant
         retained_rows = retained_groups.get(quadrant, [])
         ensure_dir(quadrant_dir)

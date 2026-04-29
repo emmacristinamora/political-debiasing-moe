@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=build_quadrant_datasets
-#SBATCH --partition=long_gpul40
+#SBATCH --partition=gpunew
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=80G

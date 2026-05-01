@@ -201,84 +201,58 @@ extract_activations:
 # === 05 BUILD QUADRANT DATASETS ===
 
 quadrant_dataset:
-
-  # Paths (relative to project root)
+  # paths & config
   normalized_dir:    data/experts/raw/normalized
-  output_dir:        data/experts/quadrant-pools
+  output_dir:        data/experts/quadrant-pools-new
   econ_vectors_path: data/steering-vectors/vectors/economic_vectors.pt
   soc_vectors_path:  data/steering-vectors/vectors/social_vectors.pt
-
-  # Model (inherits from extract_activations if not overridden)
-  # model_name_or_path is read from extract_activations.model_name by default
   device: "cuda"
   dtype:  "float16"
-
-  # Token-level sliding window chunking
+  # sliding window chunking
   chunking:
     chunk_size:       512   # window size in whitespace tokens
     chunk_overlap:    128   # overlap between consecutive windows
     min_chunk_tokens: 128   # discard windows shorter than this
-
-  # Quadrant retention thresholds
-  # Scores are cosine similarities between chunk embedding and steering vector.
-  # Tune these after inspecting scored_chunks.jsonl score distributions.
+  # quadrant retention thresholds
   thresholds:
     min_abs_econ:           0.0
     min_abs_soc:            0.0
     min_confidence_margin:  0.015
-
-  # Number of HoC speeches to keep (stratified by decade × party).
-  # Set to null to process all 1.6M speeches (takes ~30h on A100).
-  # 100_000 gives a representative sample in ~6h.
+  # set to null to process all 1.6M speeches
   hoc_sample_n: 100000
-
-  # Which model layer to pool for chunk embeddings.
-  # layer: -1 uses the final hidden state.
-  # To match the activation extraction layers [8,12,16,20,24], set layer to
-  # any of those values (internally indexed as hidden_states[layer+1]).
+  # model layer to pool for chunk embeddings
   pooling:
-    layer:      -1
+    layer:      20
     pooling:    mean
     max_length: 512
     batch_size: 8    # chunks per model forward pass; reduce to 4 on 16GB VRAM
-
-  # Topic prototype labeling.
-  # Each prototype is embedded with the same model at startup.
-  # Retained chunks are labeled by cosine similarity to these prototypes.
+  # topic labeling
   topics:
     prototypes:
       - name: economy
         text: "taxation, inflation, wages, markets, trade, investment, fiscal policy,
                economic growth, GDP, public spending, deficit, debt, redistribution"
-
       - name: immigration
         text: "migrants, asylum, border control, deportation, refugee policy,
                immigration, citizenship, visa, integration, multiculturalism"
-
       - name: foreign_policy
         text: "war, alliances, military aid, sanctions, diplomacy, NATO,
                foreign relations, defence, international trade, geopolitics"
-
       - name: law_order
         text: "crime, policing, sentencing, prisons, public safety,
                criminal justice, law enforcement, drugs, gangs, police reform"
-
       - name: environment_energy
         text: "climate change, energy policy, oil, gas, renewables, emissions,
                environment, sustainability, carbon tax, green deal, fossil fuels"
-
       - name: culture_identity
         text: "religion, family, gender, abortion, identity politics, culture,
                values, tradition, secularism, free speech, woke, LGBTQ"
-
       - name: welfare_labor
         text: "social benefits, pensions, unions, labor rights, welfare,
                unemployment, workers, social protection, minimum wage, strikes"
-
       - name: health_education
         text: "schools, healthcare, hospitals, universities, teachers,
                NHS, education, public health, mental health, childcare"
-
       - name: governance_institutions
         text: "elections, parliament, constitution, courts, democracy,
                rule of law, institutions, government, corruption, accountability"

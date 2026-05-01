@@ -10,6 +10,7 @@ __pycache__/
 
 # data (large files — transfer via rsync, not git)
 data/experts/raw/normalized/
+data/experts/quadrant-pools-old/
 
 # outputs / logs
 outputs/

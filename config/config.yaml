@@ -256,3 +256,35 @@ quadrant_dataset:
       - name: governance_institutions
         text: "elections, parliament, constitution, courts, democracy,
                rule of law, institutions, government, corruption, accountability"
+
+
+# === 06 VALIDATE EXPERT DATASETS ===
+
+validate_expert_datasets:
+  # viable_topics: [economy, foreign_policy, health_education, governance_institutions]
+  viable_topics: [economy, governance_institutions]
+  held_out_topic: environment_energy
+  target_n_per_quadrant: 800
+  source_cap_pct: 0.25
+  min_cell_size: 50
+  length_filter:
+    min_tokens: 200
+    max_tokens: 600
+  held_out_sources:              # one source per quadrant held out as val_source
+    right_auth: hoc
+    left_auth:  uk_press
+    left_lib:   hoc
+    right_lib:  uk_press
+  val_pct: 0.10                  # fraction of sampled chunks split to val_indist (doc-level)
+  random_seed: 42
+  dedupe:
+    enabled: true
+    min_chunk_index_gap: 2       # min gap between chunk indices within the same document
+  confidence_bins:
+    n_bins: 3
+    edges: [0.015, 0.025, 0.040, 1.0]  # bin edges; first = retention threshold
+  sanity_checks:
+    max_source_pct_train: 0.30          # slightly looser than cap to allow rounding slack
+    max_topic_kl_divergence: 0.15
+    max_length_ratio: 1.30              # longest / shortest mean n_tokens across quadrants
+    max_conf_margin_ratio: 2.0          # longest / shortest mean conf_margin across quadrants

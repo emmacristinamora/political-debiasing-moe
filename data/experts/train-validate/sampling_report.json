@@ -1,0 +1,1119 @@
+{
+  "config_snapshot": {
+    "viable_topics": [
+      "economy",
+      "governance_institutions"
+    ],
+    "held_out_topic": "environment_energy",
+    "target_n_per_quadrant": 800,
+    "source_cap_pct": 0.25,
+    "min_cell_size": 50,
+    "length_filter": {
+      "min_tokens": 200,
+      "max_tokens": 600
+    },
+    "held_out_sources": {
+      "right_auth": "hoc",
+      "left_auth": "uk_press",
+      "left_lib": "hoc",
+      "right_lib": "uk_press"
+    },
+    "val_pct": 0.1,
+    "random_seed": 42,
+    "dedupe": {
+      "enabled": true,
+      "min_chunk_index_gap": 2
+    },
+    "confidence_bins": {
+      "n_bins": 3,
+      "edges": [
+        0.015,
+        0.025,
+        0.04,
+        1.0
+      ]
+    },
+    "sanity_checks": {
+      "max_source_pct_train": 0.3,
+      "max_topic_kl_divergence": 0.15,
+      "max_length_ratio": 1.3,
+      "max_conf_margin_ratio": 2.0
+    }
+  },
+  "random_seed": 42,
+  "timestamp": "2026-05-01T14:56:45.377573+00:00",
+  "input_counts": {
+    "right_auth": 43642,
+    "left_auth": 8704,
+    "left_lib": 48811,
+    "right_lib": 235594
+  },
+  "stage_1_post_topic_filter": {
+    "right_auth": 17774,
+    "left_auth": 7095,
+    "left_lib": 21456,
+    "right_lib": 90019
+  },
+  "stage_2_carve_outs": {
+    "val_topic_counts": {
+      "right_auth": 271,
+      "left_auth": 206,
+      "left_lib": 4141,
+      "right_lib": 5732
+    },
+    "val_source_counts": {
+      "right_auth": 728,
+      "left_auth": 465,
+      "left_lib": 875,
+      "right_lib": 1648
+    },
+    "working_pool_counts": {
+      "right_auth": 16775,
+      "left_auth": 6424,
+      "left_lib": 16440,
+      "right_lib": 82639
+    }
+  },
+  "stage_4_dedupe": {
+    "before_per_quadrant": {
+      "right_auth": 16775,
+      "left_auth": 6424,
+      "left_lib": 16440,
+      "right_lib": 82639
+    },
+    "after_per_quadrant": {
+      "right_auth": 12919,
+      "left_auth": 5531,
+      "left_lib": 13713,
+      "right_lib": 64858
+    }
+  },
+  "stage_4_5_cell_diagnostics": {
+    "right_auth": {
+      "total_chunks": 12919,
+      "per_topic": {
+        "economy": 226,
+        "governance_institutions": 12693
+      },
+      "per_source": {
+        "ec_press": 8,
+        "ire_press": 8,
+        "reddit_conservative": 11612,
+        "reddit_liberal": 983,
+        "uk_press": 308
+      },
+      "cells": {
+        "economy|ec_press": 7,
+        "governance_institutions|ec_press": 1,
+        "governance_institutions|ire_press": 8,
+        "governance_institutions|reddit_conservative": 11424,
+        "economy|reddit_conservative": 188,
+        "governance_institutions|reddit_liberal": 961,
+        "economy|reddit_liberal": 22,
+        "governance_institutions|uk_press": 299,
+        "economy|uk_press": 9
+      },
+      "cells_below_min_size": [
+        {
+          "topic": "economy",
+          "source": "ec_press",
+          "n": 7
+        },
+        {
+          "topic": "economy",
+          "source": "ire_press",
+          "n": 0
+        },
+        {
+          "topic": "economy",
+          "source": "reddit_liberal",
+          "n": 22
+        },
+        {
+          "topic": "economy",
+          "source": "uk_press",
+          "n": 9
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "ec_press",
+          "n": 1
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "ire_press",
+          "n": 8
+        }
+      ]
+    },
+    "left_auth": {
+      "total_chunks": 5531,
+      "per_topic": {
+        "economy": 3108,
+        "governance_institutions": 2423
+      },
+      "per_source": {
+        "ec_press": 5209,
+        "hoc": 25,
+        "ire_press": 25,
+        "reddit_conservative": 192,
+        "reddit_liberal": 80
+      },
+      "cells": {
+        "economy|ec_press": 3058,
+        "governance_institutions|ec_press": 2151,
+        "economy|hoc": 4,
+        "governance_institutions|hoc": 21,
+        "governance_institutions|ire_press": 16,
+        "economy|ire_press": 9,
+        "governance_institutions|reddit_conservative": 161,
+        "economy|reddit_conservative": 31,
+        "governance_institutions|reddit_liberal": 74,
+        "economy|reddit_liberal": 6
+      },
+      "cells_below_min_size": [
+        {
+          "topic": "economy",
+          "source": "hoc",
+          "n": 4
+        },
+        {
+          "topic": "economy",
+          "source": "ire_press",
+          "n": 9
+        },
+        {
+          "topic": "economy",
+          "source": "reddit_conservative",
+          "n": 31
+        },
+        {
+          "topic": "economy",
+          "source": "reddit_liberal",
+          "n": 6
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "hoc",
+          "n": 21
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "ire_press",
+          "n": 16
+        }
+      ]
+    },
+    "left_lib": {
+      "total_chunks": 13713,
+      "per_topic": {
+        "governance_institutions": 9427,
+        "economy": 4286
+      },
+      "per_source": {
+        "ec_press": 7738,
+        "ire_press": 337,
+        "reddit_conservative": 622,
+        "reddit_liberal": 490,
+        "uk_press": 4526
+      },
+      "cells": {
+        "governance_institutions|ec_press": 4494,
+        "economy|ec_press": 3244,
+        "economy|ire_press": 156,
+        "governance_institutions|ire_press": 181,
+        "governance_institutions|reddit_conservative": 434,
+        "economy|reddit_conservative": 188,
+        "economy|reddit_liberal": 128,
+        "governance_institutions|reddit_liberal": 362,
+        "governance_institutions|uk_press": 3956,
+        "economy|uk_press": 570
+      },
+      "cells_below_min_size": []
+    },
+    "right_lib": {
+      "total_chunks": 64858,
+      "per_topic": {
+        "governance_institutions": 55767,
+        "economy": 9091
+      },
+      "per_source": {
+        "ec_press": 72,
+        "hoc": 777,
+        "ire_press": 13,
+        "reddit_conservative": 54585,
+        "reddit_liberal": 9411
+      },
+      "cells": {
+        "governance_institutions|ec_press": 41,
+        "economy|ec_press": 31,
+        "economy|hoc": 292,
+        "governance_institutions|hoc": 485,
+        "governance_institutions|ire_press": 3,
+        "economy|ire_press": 10,
+        "economy|reddit_conservative": 7220,
+        "governance_institutions|reddit_conservative": 47365,
+        "governance_institutions|reddit_liberal": 7873,
+        "economy|reddit_liberal": 1538
+      },
+      "cells_below_min_size": [
+        {
+          "topic": "economy",
+          "source": "ec_press",
+          "n": 31
+        },
+        {
+          "topic": "economy",
+          "source": "ire_press",
+          "n": 10
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "ec_press",
+          "n": 41
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "ire_press",
+          "n": 3
+        }
+      ]
+    }
+  },
+  "stage_3_cell_targets": [
+    {
+      "quadrant": "right_auth",
+      "topic": "economy",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "economy",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "economy",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "economy",
+      "source": "reddit_liberal",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "economy",
+      "source": "uk_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "governance_institutions",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "governance_institutions",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "governance_institutions",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "governance_institutions",
+      "source": "reddit_liberal",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "governance_institutions",
+      "source": "uk_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "economy",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "economy",
+      "source": "hoc",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "economy",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "economy",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "economy",
+      "source": "reddit_liberal",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "governance_institutions",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "governance_institutions",
+      "source": "hoc",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "governance_institutions",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "governance_institutions",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "governance_institutions",
+      "source": "reddit_liberal",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "economy",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "economy",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "economy",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "economy",
+      "source": "reddit_liberal",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "economy",
+      "source": "uk_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "governance_institutions",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "governance_institutions",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "governance_institutions",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "governance_institutions",
+      "source": "reddit_liberal",
+      "target_count": 80
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "governance_institutions",
+      "source": "uk_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "economy",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "economy",
+      "source": "hoc",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "economy",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "economy",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "economy",
+      "source": "reddit_liberal",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "governance_institutions",
+      "source": "ec_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "governance_institutions",
+      "source": "hoc",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "governance_institutions",
+      "source": "ire_press",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "governance_institutions",
+      "source": "reddit_conservative",
+      "target_count": 80
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "governance_institutions",
+      "source": "reddit_liberal",
+      "target_count": 80
+    }
+  ],
+  "stage_5_q2_template": {
+    "realized_cells": {
+      "economy|ec_press": 100,
+      "governance_institutions|ec_press": 100,
+      "governance_institutions|reddit_conservative": 100,
+      "governance_institutions|reddit_liberal": 74
+    },
+    "cells_below_min_size": [
+      {
+        "topic": "economy",
+        "source": "hoc",
+        "n_available": 4
+      },
+      {
+        "topic": "economy",
+        "source": "ire_press",
+        "n_available": 9
+      },
+      {
+        "topic": "economy",
+        "source": "reddit_conservative",
+        "n_available": 31
+      },
+      {
+        "topic": "economy",
+        "source": "reddit_liberal",
+        "n_available": 6
+      },
+      {
+        "topic": "governance_institutions",
+        "source": "hoc",
+        "n_available": 21
+      },
+      {
+        "topic": "governance_institutions",
+        "source": "ire_press",
+        "n_available": 16
+      }
+    ],
+    "total_sampled": 374
+  },
+  "stage_6_other_quadrants": {
+    "right_auth": {
+      "total_sampled": 200,
+      "deviations_from_template": [
+        {
+          "quadrant": "right_auth",
+          "topic": "economy",
+          "source": "ec_press",
+          "template": 100,
+          "realized": 0,
+          "delta": -100
+        },
+        {
+          "quadrant": "right_auth",
+          "topic": "governance_institutions",
+          "source": "ec_press",
+          "template": 100,
+          "realized": 0,
+          "delta": -100
+        },
+        {
+          "quadrant": "right_auth",
+          "topic": "governance_institutions",
+          "source": "reddit_liberal",
+          "template": 74,
+          "realized": 100,
+          "delta": 26
+        }
+      ]
+    },
+    "left_lib": {
+      "total_sampled": 374,
+      "deviations_from_template": []
+    },
+    "right_lib": {
+      "total_sampled": 200,
+      "deviations_from_template": [
+        {
+          "quadrant": "right_lib",
+          "topic": "economy",
+          "source": "ec_press",
+          "template": 100,
+          "realized": 0,
+          "delta": -100
+        },
+        {
+          "quadrant": "right_lib",
+          "topic": "governance_institutions",
+          "source": "ec_press",
+          "template": 100,
+          "realized": 0,
+          "delta": -100
+        },
+        {
+          "quadrant": "right_lib",
+          "topic": "governance_institutions",
+          "source": "reddit_liberal",
+          "template": 74,
+          "realized": 100,
+          "delta": 26
+        }
+      ]
+    }
+  },
+  "stage_7_split": {
+    "right_auth": {
+      "train_docs": 142,
+      "val_docs": 16,
+      "train_chunks": 184,
+      "val_chunks": 16
+    },
+    "left_auth": {
+      "train_docs": 270,
+      "val_docs": 30,
+      "train_chunks": 342,
+      "val_chunks": 32
+    },
+    "left_lib": {
+      "train_docs": 305,
+      "val_docs": 34,
+      "train_chunks": 337,
+      "val_chunks": 37
+    },
+    "right_lib": {
+      "train_docs": 175,
+      "val_docs": 20,
+      "train_chunks": 180,
+      "val_chunks": 20
+    }
+  },
+  "stage_8_sanity": {
+    "all_passed": false,
+    "check_results": [
+      {
+        "check_name": "SOURCE_CAP",
+        "quadrant": "right_auth",
+        "passed": false,
+        "details": {
+          "worst_source": "reddit_conservative",
+          "pct": 0.5109,
+          "limit": 0.3
+        }
+      },
+      {
+        "check_name": "SOURCE_CAP",
+        "quadrant": "left_auth",
+        "passed": false,
+        "details": {
+          "worst_source": "ec_press",
+          "pct": 0.5322,
+          "limit": 0.3
+        }
+      },
+      {
+        "check_name": "SOURCE_CAP",
+        "quadrant": "left_lib",
+        "passed": false,
+        "details": {
+          "worst_source": "ec_press",
+          "pct": 0.5341,
+          "limit": 0.3
+        }
+      },
+      {
+        "check_name": "SOURCE_CAP",
+        "quadrant": "right_lib",
+        "passed": false,
+        "details": {
+          "worst_source": "reddit_liberal",
+          "pct": 0.5056,
+          "limit": 0.3
+        }
+      },
+      {
+        "check_name": "TOPIC_KL",
+        "passed": false,
+        "details": {
+          "q_a": "right_auth",
+          "q_b": "left_auth",
+          "kl": 0.305382,
+          "limit": 0.15
+        }
+      },
+      {
+        "check_name": "TOPIC_KL",
+        "passed": false,
+        "details": {
+          "q_a": "right_auth",
+          "q_b": "left_lib",
+          "kl": 0.335286,
+          "limit": 0.15
+        }
+      },
+      {
+        "check_name": "TOPIC_KL",
+        "passed": true,
+        "details": {
+          "q_a": "right_auth",
+          "q_b": "right_lib",
+          "kl": 0.0,
+          "limit": 0.15
+        }
+      },
+      {
+        "check_name": "TOPIC_KL",
+        "passed": true,
+        "details": {
+          "q_a": "left_auth",
+          "q_b": "left_lib",
+          "kl": 0.001175,
+          "limit": 0.15
+        }
+      },
+      {
+        "check_name": "TOPIC_KL",
+        "passed": false,
+        "details": {
+          "q_a": "left_auth",
+          "q_b": "right_lib",
+          "kl": 4.877157,
+          "limit": 0.15
+        }
+      },
+      {
+        "check_name": "TOPIC_KL",
+        "passed": false,
+        "details": {
+          "q_a": "left_lib",
+          "q_b": "right_lib",
+          "kl": 5.305873,
+          "limit": 0.15
+        }
+      },
+      {
+        "check_name": "LENGTH_RATIO",
+        "passed": true,
+        "details": {
+          "means": {
+            "right_auth": 487.2,
+            "left_auth": 439.1,
+            "left_lib": 467.5,
+            "right_lib": 462.8
+          },
+          "ratio": 1.1095,
+          "limit": 1.3
+        }
+      },
+      {
+        "check_name": "CONF_MARGIN_RATIO",
+        "passed": true,
+        "details": {
+          "means": {
+            "right_auth": 0.025282,
+            "left_auth": 0.020973,
+            "left_lib": 0.028457,
+            "right_lib": 0.031958
+          },
+          "ratio": 1.5238,
+          "limit": 2.0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "right_auth",
+        "val_split": "val_indist",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "right_auth",
+        "val_split": "val_source",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "left_auth",
+        "val_split": "val_indist",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "left_auth",
+        "val_split": "val_source",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "left_lib",
+        "val_split": "val_indist",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "left_lib",
+        "val_split": "val_source",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "right_lib",
+        "val_split": "val_indist",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "NO_DOC_LEAKAGE",
+        "quadrant": "right_lib",
+        "val_split": "val_source",
+        "passed": true,
+        "details": {
+          "n_leaked_docs": 0
+        }
+      },
+      {
+        "check_name": "VAL_TOPIC_PURITY",
+        "quadrant": "right_auth",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_topic": "environment_energy"
+        }
+      },
+      {
+        "check_name": "VAL_TOPIC_PURITY",
+        "quadrant": "left_auth",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_topic": "environment_energy"
+        }
+      },
+      {
+        "check_name": "VAL_TOPIC_PURITY",
+        "quadrant": "left_lib",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_topic": "environment_energy"
+        }
+      },
+      {
+        "check_name": "VAL_TOPIC_PURITY",
+        "quadrant": "right_lib",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_topic": "environment_energy"
+        }
+      },
+      {
+        "check_name": "VAL_SOURCE_PURITY",
+        "quadrant": "right_auth",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_source": "hoc"
+        }
+      },
+      {
+        "check_name": "VAL_SOURCE_PURITY",
+        "quadrant": "left_auth",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_source": "uk_press"
+        }
+      },
+      {
+        "check_name": "VAL_SOURCE_PURITY",
+        "quadrant": "left_lib",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_source": "hoc"
+        }
+      },
+      {
+        "check_name": "VAL_SOURCE_PURITY",
+        "quadrant": "right_lib",
+        "passed": true,
+        "details": {
+          "n_impure": 0,
+          "expected_source": "uk_press"
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_auth",
+        "split": "train",
+        "passed": true,
+        "details": {
+          "n": 184,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_auth",
+        "split": "val_indist",
+        "passed": false,
+        "details": {
+          "n": 16,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_auth",
+        "split": "val_source",
+        "passed": true,
+        "details": {
+          "n": 728,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_auth",
+        "split": "val_topic",
+        "passed": true,
+        "details": {
+          "n": 271,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_auth",
+        "split": "train",
+        "passed": true,
+        "details": {
+          "n": 342,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_auth",
+        "split": "val_indist",
+        "passed": false,
+        "details": {
+          "n": 32,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_auth",
+        "split": "val_source",
+        "passed": true,
+        "details": {
+          "n": 465,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_auth",
+        "split": "val_topic",
+        "passed": true,
+        "details": {
+          "n": 206,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_lib",
+        "split": "train",
+        "passed": true,
+        "details": {
+          "n": 337,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_lib",
+        "split": "val_indist",
+        "passed": false,
+        "details": {
+          "n": 37,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_lib",
+        "split": "val_source",
+        "passed": true,
+        "details": {
+          "n": 875,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "left_lib",
+        "split": "val_topic",
+        "passed": true,
+        "details": {
+          "n": 4141,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_lib",
+        "split": "train",
+        "passed": true,
+        "details": {
+          "n": 180,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_lib",
+        "split": "val_indist",
+        "passed": false,
+        "details": {
+          "n": 20,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_lib",
+        "split": "val_source",
+        "passed": true,
+        "details": {
+          "n": 1648,
+          "min": 50
+        }
+      },
+      {
+        "check_name": "NON_EMPTY",
+        "quadrant": "right_lib",
+        "split": "val_topic",
+        "passed": true,
+        "details": {
+          "n": 5732,
+          "min": 50
+        }
+      }
+    ]
+  },
+  "final_counts": {
+    "right_auth": {
+      "train": 184,
+      "val_indist": 16,
+      "val_source": 728,
+      "val_topic": 271
+    },
+    "left_auth": {
+      "train": 342,
+      "val_indist": 32,
+      "val_source": 465,
+      "val_topic": 206
+    },
+    "left_lib": {
+      "train": 337,
+      "val_indist": 37,
+      "val_source": 875,
+      "val_topic": 4141
+    },
+    "right_lib": {
+      "train": 180,
+      "val_indist": 20,
+      "val_source": 1648,
+      "val_topic": 5732
+    }
+  }
+}

@@ -26,7 +26,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, P
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH  = PROJECT_ROOT / "config" / "config.yaml"
 
-# Map from --source flag to normalized JSONL filename.
+# map from --source flag to normalized JSONL filename
 NORMALIZED_FILES: Dict[str, str] = {
     "allsides":            "allsides.jsonl",
     "reddit_liberal":      "reddit_liberal.jsonl",

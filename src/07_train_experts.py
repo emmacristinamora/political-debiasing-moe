@@ -259,12 +259,14 @@ def tokenize_chunks(
         max_length: truncation cap in tokens
 
     Returns:
-        HuggingFace Dataset with input_ids, attention_mask, and labels columns.
+        HuggingFace Dataset with input_ids and attention_mask columns.
+        Labels are created by DataCollatorForLanguageModeling at collation time.
 
     Logic:
-        Tokenizes each chunk's text with truncation. Sets labels equal to
-        input_ids so the model learns the full text distribution (no prompt
-        masking). Logs token length statistics and truncation count.
+        Tokenizes each chunk's text with truncation. Does not set labels —
+        DataCollatorForLanguageModeling(mlm=False) clones input_ids to labels
+        and masks padding positions with -100 after batching. Logs token length
+        statistics and truncation count.
     """
     token_lengths: list[int] = []
     n_truncated = 0
@@ -280,7 +282,6 @@ def tokenize_chunks(
         if seq_len == max_length:
             n_truncated += 1
         token_lengths.append(seq_len)
-        enc["labels"] = enc["input_ids"].copy()
         rows.append(enc)
 
     mean_len = sum(token_lengths) / len(token_lengths) if token_lengths else 0.0

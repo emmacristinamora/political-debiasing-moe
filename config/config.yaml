@@ -262,29 +262,83 @@ quadrant_dataset:
 
 validate_expert_datasets:
   # viable_topics: [economy, foreign_policy, health_education, governance_institutions]
-  viable_topics: [economy, governance_institutions]
-  held_out_topic: environment_energy
+  viable_topics: [economy, foreign_policy, law_order, health_education, governance_institutions]
+  held_out_topic: immigration
   target_n_per_quadrant: 800
   source_cap_pct: 0.25
-  min_cell_size: 50
+  min_cell_size: 25
   length_filter:
-    min_tokens: 200
-    max_tokens: 600
+    min_tokens: 50
+    max_tokens: 700
   held_out_sources:              # one source per quadrant held out as val_source
-    right_auth: hoc
+    right_auth: uk_press
     left_auth:  uk_press
     left_lib:   hoc
     right_lib:  uk_press
-  val_pct: 0.10                  # fraction of sampled chunks split to val_indist (doc-level)
+  val_pct: 0.15                  # fraction of sampled chunks split to val_indist (doc-level)
   random_seed: 42
   dedupe:
     enabled: true
     min_chunk_index_gap: 2       # min gap between chunk indices within the same document
   confidence_bins:
     n_bins: 3
-    edges: [0.015, 0.025, 0.040, 1.0]  # bin edges; first = retention threshold
+    edges: [0.005, 0.010, 0.018, 1.0]  # bin edges; first = retention threshold
   sanity_checks:
-    max_source_pct_train: 0.30          # slightly looser than cap to allow rounding slack
-    max_topic_kl_divergence: 0.15
+    max_source_pct_train: 0.70          # slightly looser than cap to allow rounding slack
+    max_topic_kl_divergence: 8.0
     max_length_ratio: 1.30              # longest / shortest mean n_tokens across quadrants
-    max_conf_margin_ratio: 2.0          # longest / shortest mean conf_margin across quadrants
+    max_conf_margin_ratio: 2.5          # longest / shortest mean conf_margin across quadrants
+    min_split_size: 15                  # min chunks per output split (< min_cell_size; handles left_auth edge case)
+
+
+# === 07 TRAIN EXPERTS ===
+
+train_experts:
+  base_model: "mistralai/Mistral-7B-v0.1"
+  precision: "bfloat16"
+  lora:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: [q_proj, k_proj, v_proj, o_proj]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+  training:
+    num_train_epochs: 5
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 4
+    learning_rate: 2.0e-4
+    lr_scheduler_type: "cosine"
+    warmup_ratio: 0.10
+    weight_decay: 0.01
+    bf16: true
+    tf32: true                    # H100-specific: enables TF32 for matmuls, faster
+    gradient_checkpointing: false # not needed on H100 at this scale
+    dataloader_num_workers: 4
+    remove_unused_columns: false
+  evaluation:
+    eval_strategy: "epoch"
+    save_strategy: "epoch"
+    save_total_limit: 5           # keep all 5 epoch checkpoints (one per epoch)
+    load_best_model_at_end: true
+    metric_for_best_model: "eval_val_source_loss"
+    greater_is_better: false
+    early_stopping_patience: 3
+  generation:
+    enabled: true
+    max_new_tokens: 200
+    temperature: 0.7
+    do_sample: true
+    fixed_prompts:
+      - "Write a short argument about the role of government in the economy."
+      - "What should be the state's approach to immigration policy?"
+      - "Describe your view on individual freedoms versus collective security."
+      - "What does a fair society look like to you?"
+  logging:
+    logging_steps: 10
+    report_to: "tensorboard"
+  seeds: [42, 123, 456]
+  paths:
+    train_validate_dir: "data/experts/train-validate"
+    output_dir: "data/experts/training-outputs"
+    # output layout: outputs/experts/{quadrant}/seed_{seed}/

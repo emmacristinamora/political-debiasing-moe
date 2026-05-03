@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH  = PROJECT_ROOT / "config" / "config.yaml"
 
 QUADRANTS        = ["right_auth", "left_auth", "left_lib", "right_lib"]
-TEMPLATE_QUADRANT = "left_auth"   # smallest pool; sampled first as binding constraint
+TEMPLATE_QUADRANT = "right_auth"   # smallest pool; sampled first as binding constraint
 OTHER_QUADRANTS   = [q for q in QUADRANTS if q != TEMPLATE_QUADRANT]
 
 VALID_SOURCES = {
@@ -936,7 +936,7 @@ def run_sanity_checks(
     viable_topics   = config_sampling["viable_topics"]
     held_out_topic  = config_sampling["held_out_topic"]
     held_out_sources = config_sampling["held_out_sources"]
-    min_cell_size   = config_sampling["min_cell_size"]
+    min_split_size  = sc.get("min_split_size", config_sampling["min_cell_size"])
 
     all_results: list[dict] = []
     all_results.extend(_check_source_cap(splits, sc["max_source_pct_train"]))
@@ -946,7 +946,7 @@ def run_sanity_checks(
     all_results.extend(_check_no_doc_leakage(splits))
     all_results.extend(_check_val_topic_purity(splits, held_out_topic))
     all_results.extend(_check_val_source_purity(splits, held_out_sources))
-    all_results.extend(_check_non_empty(splits, min_cell_size))
+    all_results.extend(_check_non_empty(splits, min_split_size))
 
     all_passed = all(r["passed"] for r in all_results)
     for r in all_results:

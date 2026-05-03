@@ -2,23 +2,26 @@
   "config_snapshot": {
     "viable_topics": [
       "economy",
+      "foreign_policy",
+      "law_order",
+      "health_education",
       "governance_institutions"
     ],
-    "held_out_topic": "environment_energy",
+    "held_out_topic": "immigration",
     "target_n_per_quadrant": 800,
     "source_cap_pct": 0.25,
-    "min_cell_size": 50,
+    "min_cell_size": 25,
     "length_filter": {
-      "min_tokens": 200,
-      "max_tokens": 600
+      "min_tokens": 50,
+      "max_tokens": 700
     },
     "held_out_sources": {
-      "right_auth": "hoc",
+      "right_auth": "uk_press",
       "left_auth": "uk_press",
       "left_lib": "hoc",
       "right_lib": "uk_press"
     },
-    "val_pct": 0.1,
+    "val_pct": 0.15,
     "random_seed": 42,
     "dedupe": {
       "enabled": true,
@@ -27,255 +30,409 @@
     "confidence_bins": {
       "n_bins": 3,
       "edges": [
-        0.015,
-        0.025,
-        0.04,
+        0.005,
+        0.01,
+        0.018,
         1.0
       ]
     },
     "sanity_checks": {
-      "max_source_pct_train": 0.3,
-      "max_topic_kl_divergence": 0.15,
+      "max_source_pct_train": 0.7,
+      "max_topic_kl_divergence": 8.0,
       "max_length_ratio": 1.3,
-      "max_conf_margin_ratio": 2.0
+      "max_conf_margin_ratio": 2.5,
+      "min_split_size": 15
     }
   },
   "random_seed": 42,
-  "timestamp": "2026-05-01T14:56:45.377573+00:00",
+  "timestamp": "2026-05-03T13:12:37.160850+00:00",
   "input_counts": {
-    "right_auth": 43642,
-    "left_auth": 8704,
-    "left_lib": 48811,
-    "right_lib": 235594
+    "right_auth": 8382,
+    "left_auth": 20382,
+    "left_lib": 153757,
+    "right_lib": 259252
   },
   "stage_1_post_topic_filter": {
-    "right_auth": 17774,
-    "left_auth": 7095,
-    "left_lib": 21456,
-    "right_lib": 90019
+    "right_auth": 6875,
+    "left_auth": 19305,
+    "left_lib": 103310,
+    "right_lib": 83997
   },
   "stage_2_carve_outs": {
     "val_topic_counts": {
-      "right_auth": 271,
-      "left_auth": 206,
-      "left_lib": 4141,
-      "right_lib": 5732
+      "right_auth": 311,
+      "left_auth": 1034,
+      "left_lib": 15824,
+      "right_lib": 8700
     },
     "val_source_counts": {
-      "right_auth": 728,
-      "left_auth": 465,
-      "left_lib": 875,
-      "right_lib": 1648
+      "right_auth": 1425,
+      "left_auth": 1134,
+      "left_lib": 29679,
+      "right_lib": 7039
     },
     "working_pool_counts": {
-      "right_auth": 16775,
-      "left_auth": 6424,
-      "left_lib": 16440,
-      "right_lib": 82639
+      "right_auth": 5139,
+      "left_auth": 17137,
+      "left_lib": 57807,
+      "right_lib": 68258
     }
   },
   "stage_4_dedupe": {
     "before_per_quadrant": {
-      "right_auth": 16775,
-      "left_auth": 6424,
-      "left_lib": 16440,
-      "right_lib": 82639
+      "right_auth": 5139,
+      "left_auth": 17137,
+      "left_lib": 57807,
+      "right_lib": 68258
     },
     "after_per_quadrant": {
-      "right_auth": 12919,
-      "left_auth": 5531,
-      "left_lib": 13713,
-      "right_lib": 64858
+      "right_auth": 4516,
+      "left_auth": 16935,
+      "left_lib": 45753,
+      "right_lib": 54845
     }
   },
   "stage_4_5_cell_diagnostics": {
     "right_auth": {
-      "total_chunks": 12919,
+      "total_chunks": 4516,
       "per_topic": {
-        "economy": 226,
-        "governance_institutions": 12693
+        "governance_institutions": 374,
+        "foreign_policy": 3168,
+        "law_order": 448,
+        "economy": 415,
+        "health_education": 111
       },
       "per_source": {
-        "ec_press": 8,
-        "ire_press": 8,
-        "reddit_conservative": 11612,
-        "reddit_liberal": 983,
-        "uk_press": 308
+        "allsides": 922,
+        "hoc": 24,
+        "reddit_conservative": 3121,
+        "reddit_liberal": 449
       },
       "cells": {
-        "economy|ec_press": 7,
-        "governance_institutions|ec_press": 1,
-        "governance_institutions|ire_press": 8,
-        "governance_institutions|reddit_conservative": 11424,
-        "economy|reddit_conservative": 188,
-        "governance_institutions|reddit_liberal": 961,
-        "economy|reddit_liberal": 22,
-        "governance_institutions|uk_press": 299,
-        "economy|uk_press": 9
-      },
-      "cells_below_min_size": [
-        {
-          "topic": "economy",
-          "source": "ec_press",
-          "n": 7
-        },
-        {
-          "topic": "economy",
-          "source": "ire_press",
-          "n": 0
-        },
-        {
-          "topic": "economy",
-          "source": "reddit_liberal",
-          "n": 22
-        },
-        {
-          "topic": "economy",
-          "source": "uk_press",
-          "n": 9
-        },
-        {
-          "topic": "governance_institutions",
-          "source": "ec_press",
-          "n": 1
-        },
-        {
-          "topic": "governance_institutions",
-          "source": "ire_press",
-          "n": 8
-        }
-      ]
-    },
-    "left_auth": {
-      "total_chunks": 5531,
-      "per_topic": {
-        "economy": 3108,
-        "governance_institutions": 2423
-      },
-      "per_source": {
-        "ec_press": 5209,
-        "hoc": 25,
-        "ire_press": 25,
-        "reddit_conservative": 192,
-        "reddit_liberal": 80
-      },
-      "cells": {
-        "economy|ec_press": 3058,
-        "governance_institutions|ec_press": 2151,
-        "economy|hoc": 4,
-        "governance_institutions|hoc": 21,
-        "governance_institutions|ire_press": 16,
-        "economy|ire_press": 9,
-        "governance_institutions|reddit_conservative": 161,
-        "economy|reddit_conservative": 31,
-        "governance_institutions|reddit_liberal": 74,
-        "economy|reddit_liberal": 6
+        "governance_institutions|allsides": 308,
+        "foreign_policy|allsides": 438,
+        "law_order|allsides": 88,
+        "economy|allsides": 48,
+        "health_education|allsides": 40,
+        "economy|hoc": 15,
+        "foreign_policy|hoc": 5,
+        "governance_institutions|hoc": 2,
+        "health_education|hoc": 2,
+        "foreign_policy|reddit_conservative": 2350,
+        "governance_institutions|reddit_conservative": 58,
+        "economy|reddit_conservative": 319,
+        "health_education|reddit_conservative": 64,
+        "law_order|reddit_conservative": 330,
+        "foreign_policy|reddit_liberal": 375,
+        "economy|reddit_liberal": 33,
+        "law_order|reddit_liberal": 30,
+        "governance_institutions|reddit_liberal": 6,
+        "health_education|reddit_liberal": 5
       },
       "cells_below_min_size": [
         {
           "topic": "economy",
           "source": "hoc",
+          "n": 15
+        },
+        {
+          "topic": "foreign_policy",
+          "source": "hoc",
+          "n": 5
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "hoc",
+          "n": 2
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "reddit_liberal",
+          "n": 6
+        },
+        {
+          "topic": "health_education",
+          "source": "hoc",
+          "n": 2
+        },
+        {
+          "topic": "health_education",
+          "source": "reddit_liberal",
+          "n": 5
+        },
+        {
+          "topic": "law_order",
+          "source": "hoc",
+          "n": 0
+        }
+      ]
+    },
+    "left_auth": {
+      "total_chunks": 16935,
+      "per_topic": {
+        "foreign_policy": 2228,
+        "health_education": 7893,
+        "governance_institutions": 3540,
+        "economy": 2506,
+        "law_order": 768
+      },
+      "per_source": {
+        "allsides": 250,
+        "ec_press": 1388,
+        "hoc": 14810,
+        "ire_press": 30,
+        "reddit_conservative": 367,
+        "reddit_liberal": 90
+      },
+      "cells": {
+        "foreign_policy|allsides": 155,
+        "health_education|allsides": 24,
+        "governance_institutions|allsides": 50,
+        "economy|allsides": 4,
+        "law_order|allsides": 17,
+        "economy|ec_press": 1097,
+        "foreign_policy|ec_press": 263,
+        "governance_institutions|ec_press": 23,
+        "health_education|ec_press": 5,
+        "health_education|hoc": 7808,
+        "governance_institutions|hoc": 3447,
+        "foreign_policy|hoc": 1484,
+        "economy|hoc": 1330,
+        "law_order|hoc": 741,
+        "health_education|ire_press": 25,
+        "economy|ire_press": 4,
+        "foreign_policy|ire_press": 1,
+        "foreign_policy|reddit_conservative": 267,
+        "economy|reddit_conservative": 42,
+        "law_order|reddit_conservative": 8,
+        "health_education|reddit_conservative": 31,
+        "governance_institutions|reddit_conservative": 19,
+        "foreign_policy|reddit_liberal": 58,
+        "economy|reddit_liberal": 29,
+        "governance_institutions|reddit_liberal": 1,
+        "law_order|reddit_liberal": 2
+      },
+      "cells_below_min_size": [
+        {
+          "topic": "economy",
+          "source": "allsides",
           "n": 4
         },
         {
           "topic": "economy",
           "source": "ire_press",
-          "n": 9
+          "n": 4
         },
         {
-          "topic": "economy",
-          "source": "reddit_conservative",
-          "n": 31
-        },
-        {
-          "topic": "economy",
-          "source": "reddit_liberal",
-          "n": 6
+          "topic": "foreign_policy",
+          "source": "ire_press",
+          "n": 1
         },
         {
           "topic": "governance_institutions",
-          "source": "hoc",
-          "n": 21
+          "source": "ec_press",
+          "n": 23
         },
         {
           "topic": "governance_institutions",
           "source": "ire_press",
-          "n": 16
+          "n": 0
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "reddit_conservative",
+          "n": 19
+        },
+        {
+          "topic": "governance_institutions",
+          "source": "reddit_liberal",
+          "n": 1
+        },
+        {
+          "topic": "health_education",
+          "source": "allsides",
+          "n": 24
+        },
+        {
+          "topic": "health_education",
+          "source": "ec_press",
+          "n": 5
+        },
+        {
+          "topic": "health_education",
+          "source": "reddit_liberal",
+          "n": 0
+        },
+        {
+          "topic": "law_order",
+          "source": "allsides",
+          "n": 17
+        },
+        {
+          "topic": "law_order",
+          "source": "ec_press",
+          "n": 0
+        },
+        {
+          "topic": "law_order",
+          "source": "ire_press",
+          "n": 0
+        },
+        {
+          "topic": "law_order",
+          "source": "reddit_conservative",
+          "n": 8
+        },
+        {
+          "topic": "law_order",
+          "source": "reddit_liberal",
+          "n": 2
         }
       ]
     },
     "left_lib": {
-      "total_chunks": 13713,
+      "total_chunks": 45753,
       "per_topic": {
-        "governance_institutions": 9427,
-        "economy": 4286
+        "law_order": 4730,
+        "governance_institutions": 4032,
+        "foreign_policy": 7310,
+        "economy": 11474,
+        "health_education": 18207
       },
       "per_source": {
-        "ec_press": 7738,
-        "ire_press": 337,
-        "reddit_conservative": 622,
-        "reddit_liberal": 490,
-        "uk_press": 4526
+        "allsides": 169,
+        "ec_press": 8756,
+        "ire_press": 2016,
+        "reddit_conservative": 7539,
+        "reddit_liberal": 3209,
+        "uk_press": 24064
       },
       "cells": {
-        "governance_institutions|ec_press": 4494,
-        "economy|ec_press": 3244,
-        "economy|ire_press": 156,
-        "governance_institutions|ire_press": 181,
-        "governance_institutions|reddit_conservative": 434,
-        "economy|reddit_conservative": 188,
-        "economy|reddit_liberal": 128,
-        "governance_institutions|reddit_liberal": 362,
-        "governance_institutions|uk_press": 3956,
-        "economy|uk_press": 570
+        "law_order|allsides": 42,
+        "governance_institutions|allsides": 36,
+        "foreign_policy|allsides": 30,
+        "economy|allsides": 36,
+        "health_education|allsides": 25,
+        "economy|ec_press": 5414,
+        "foreign_policy|ec_press": 2077,
+        "governance_institutions|ec_press": 1078,
+        "health_education|ec_press": 187,
+        "economy|ire_press": 180,
+        "health_education|ire_press": 1580,
+        "law_order|ire_press": 171,
+        "governance_institutions|ire_press": 56,
+        "foreign_policy|ire_press": 29,
+        "foreign_policy|reddit_conservative": 1777,
+        "health_education|reddit_conservative": 894,
+        "governance_institutions|reddit_conservative": 405,
+        "economy|reddit_conservative": 2491,
+        "law_order|reddit_conservative": 1972,
+        "foreign_policy|reddit_liberal": 543,
+        "economy|reddit_liberal": 1694,
+        "health_education|reddit_liberal": 240,
+        "law_order|reddit_liberal": 485,
+        "governance_institutions|reddit_liberal": 247,
+        "health_education|uk_press": 15281,
+        "foreign_policy|uk_press": 2854,
+        "law_order|uk_press": 2060,
+        "governance_institutions|uk_press": 2210,
+        "economy|uk_press": 1659
       },
-      "cells_below_min_size": []
+      "cells_below_min_size": [
+        {
+          "topic": "law_order",
+          "source": "ec_press",
+          "n": 0
+        }
+      ]
     },
     "right_lib": {
-      "total_chunks": 64858,
+      "total_chunks": 54845,
       "per_topic": {
-        "governance_institutions": 55767,
-        "economy": 9091
+        "economy": 17413,
+        "governance_institutions": 5606,
+        "health_education": 2570,
+        "law_order": 9138,
+        "foreign_policy": 20118
       },
       "per_source": {
-        "ec_press": 72,
-        "hoc": 777,
-        "ire_press": 13,
-        "reddit_conservative": 54585,
-        "reddit_liberal": 9411
+        "allsides": 268,
+        "ec_press": 128,
+        "hoc": 412,
+        "ire_press": 181,
+        "reddit_conservative": 48330,
+        "reddit_liberal": 5526
       },
       "cells": {
-        "governance_institutions|ec_press": 41,
-        "economy|ec_press": 31,
-        "economy|hoc": 292,
-        "governance_institutions|hoc": 485,
-        "governance_institutions|ire_press": 3,
-        "economy|ire_press": 10,
-        "economy|reddit_conservative": 7220,
-        "governance_institutions|reddit_conservative": 47365,
-        "governance_institutions|reddit_liberal": 7873,
-        "economy|reddit_liberal": 1538
+        "economy|allsides": 32,
+        "governance_institutions|allsides": 67,
+        "health_education|allsides": 74,
+        "law_order|allsides": 42,
+        "foreign_policy|allsides": 53,
+        "economy|ec_press": 83,
+        "foreign_policy|ec_press": 26,
+        "governance_institutions|ec_press": 15,
+        "law_order|ec_press": 1,
+        "health_education|ec_press": 3,
+        "economy|hoc": 276,
+        "governance_institutions|hoc": 41,
+        "foreign_policy|hoc": 34,
+        "health_education|hoc": 58,
+        "law_order|hoc": 3,
+        "health_education|ire_press": 164,
+        "economy|ire_press": 13,
+        "foreign_policy|ire_press": 4,
+        "economy|reddit_conservative": 14956,
+        "foreign_policy|reddit_conservative": 18145,
+        "law_order|reddit_conservative": 8172,
+        "health_education|reddit_conservative": 2139,
+        "governance_institutions|reddit_conservative": 4918,
+        "foreign_policy|reddit_liberal": 1856,
+        "economy|reddit_liberal": 2053,
+        "health_education|reddit_liberal": 132,
+        "law_order|reddit_liberal": 920,
+        "governance_institutions|reddit_liberal": 565
       },
       "cells_below_min_size": [
         {
           "topic": "economy",
-          "source": "ec_press",
-          "n": 31
+          "source": "ire_press",
+          "n": 13
         },
         {
-          "topic": "economy",
+          "topic": "foreign_policy",
           "source": "ire_press",
-          "n": 10
+          "n": 4
         },
         {
           "topic": "governance_institutions",
           "source": "ec_press",
-          "n": 41
+          "n": 15
         },
         {
           "topic": "governance_institutions",
           "source": "ire_press",
+          "n": 0
+        },
+        {
+          "topic": "health_education",
+          "source": "ec_press",
           "n": 3
+        },
+        {
+          "topic": "law_order",
+          "source": "ec_press",
+          "n": 1
+        },
+        {
+          "topic": "law_order",
+          "source": "hoc",
+          "n": 3
+        },
+        {
+          "topic": "law_order",
+          "source": "ire_press",
+          "n": 0
         }
       ]
     }
@@ -284,436 +441,927 @@
     {
       "quadrant": "right_auth",
       "topic": "economy",
-      "source": "ec_press",
-      "target_count": 80
+      "source": "allsides",
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
       "topic": "economy",
-      "source": "ire_press",
-      "target_count": 80
+      "source": "hoc",
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
       "topic": "economy",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
       "topic": "economy",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
-      "topic": "economy",
-      "source": "uk_press",
-      "target_count": 80
+      "topic": "foreign_policy",
+      "source": "allsides",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "foreign_policy",
+      "source": "hoc",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "foreign_policy",
+      "source": "reddit_conservative",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "foreign_policy",
+      "source": "reddit_liberal",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "law_order",
+      "source": "allsides",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "law_order",
+      "source": "hoc",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "law_order",
+      "source": "reddit_conservative",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "law_order",
+      "source": "reddit_liberal",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "health_education",
+      "source": "allsides",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "health_education",
+      "source": "hoc",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "health_education",
+      "source": "reddit_conservative",
+      "target_count": 40
+    },
+    {
+      "quadrant": "right_auth",
+      "topic": "health_education",
+      "source": "reddit_liberal",
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
       "topic": "governance_institutions",
-      "source": "ec_press",
-      "target_count": 80
+      "source": "allsides",
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
       "topic": "governance_institutions",
-      "source": "ire_press",
-      "target_count": 80
+      "source": "hoc",
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
       "topic": "governance_institutions",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 40
     },
     {
       "quadrant": "right_auth",
       "topic": "governance_institutions",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 40
     },
     {
-      "quadrant": "right_auth",
-      "topic": "governance_institutions",
-      "source": "uk_press",
-      "target_count": 80
+      "quadrant": "left_auth",
+      "topic": "economy",
+      "source": "allsides",
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "economy",
       "source": "ec_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "economy",
       "source": "hoc",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "economy",
       "source": "ire_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "economy",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "economy",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "foreign_policy",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "foreign_policy",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "foreign_policy",
+      "source": "hoc",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "foreign_policy",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "foreign_policy",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "foreign_policy",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "law_order",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "law_order",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "law_order",
+      "source": "hoc",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "law_order",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "law_order",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "law_order",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "health_education",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "health_education",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "health_education",
+      "source": "hoc",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "health_education",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "health_education",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "health_education",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_auth",
+      "topic": "governance_institutions",
+      "source": "allsides",
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "governance_institutions",
       "source": "ec_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "governance_institutions",
       "source": "hoc",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "governance_institutions",
       "source": "ire_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "governance_institutions",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_auth",
       "topic": "governance_institutions",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "economy",
+      "source": "allsides",
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "economy",
       "source": "ec_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "economy",
       "source": "ire_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "economy",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "economy",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "economy",
       "source": "uk_press",
-      "target_count": 80
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "foreign_policy",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "foreign_policy",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "foreign_policy",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "foreign_policy",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "foreign_policy",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "foreign_policy",
+      "source": "uk_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "law_order",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "law_order",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "law_order",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "law_order",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "law_order",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "law_order",
+      "source": "uk_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "health_education",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "health_education",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "health_education",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "health_education",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "health_education",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "health_education",
+      "source": "uk_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "left_lib",
+      "topic": "governance_institutions",
+      "source": "allsides",
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "governance_institutions",
       "source": "ec_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "governance_institutions",
       "source": "ire_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "governance_institutions",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "governance_institutions",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "left_lib",
       "topic": "governance_institutions",
       "source": "uk_press",
-      "target_count": 80
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "economy",
+      "source": "allsides",
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "economy",
       "source": "ec_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "economy",
       "source": "hoc",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "economy",
       "source": "ire_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "economy",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "economy",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "foreign_policy",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "foreign_policy",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "foreign_policy",
+      "source": "hoc",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "foreign_policy",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "foreign_policy",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "foreign_policy",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "law_order",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "law_order",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "law_order",
+      "source": "hoc",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "law_order",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "law_order",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "law_order",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "health_education",
+      "source": "allsides",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "health_education",
+      "source": "ec_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "health_education",
+      "source": "hoc",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "health_education",
+      "source": "ire_press",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "health_education",
+      "source": "reddit_conservative",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "health_education",
+      "source": "reddit_liberal",
+      "target_count": 27
+    },
+    {
+      "quadrant": "right_lib",
+      "topic": "governance_institutions",
+      "source": "allsides",
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "governance_institutions",
       "source": "ec_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "governance_institutions",
       "source": "hoc",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "governance_institutions",
       "source": "ire_press",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "governance_institutions",
       "source": "reddit_conservative",
-      "target_count": 80
+      "target_count": 27
     },
     {
       "quadrant": "right_lib",
       "topic": "governance_institutions",
       "source": "reddit_liberal",
-      "target_count": 80
+      "target_count": 27
     }
   ],
   "stage_5_q2_template": {
     "realized_cells": {
-      "economy|ec_press": 100,
-      "governance_institutions|ec_press": 100,
-      "governance_institutions|reddit_conservative": 100,
-      "governance_institutions|reddit_liberal": 74
+      "economy|allsides": 40,
+      "economy|reddit_conservative": 40,
+      "economy|reddit_liberal": 33,
+      "foreign_policy|allsides": 40,
+      "foreign_policy|reddit_conservative": 40,
+      "foreign_policy|reddit_liberal": 40,
+      "law_order|allsides": 40,
+      "law_order|reddit_conservative": 40,
+      "law_order|reddit_liberal": 30,
+      "health_education|allsides": 40,
+      "health_education|reddit_conservative": 40,
+      "governance_institutions|allsides": 40,
+      "governance_institutions|reddit_conservative": 40
     },
     "cells_below_min_size": [
       {
         "topic": "economy",
         "source": "hoc",
-        "n_available": 4
+        "n_available": 15
       },
       {
-        "topic": "economy",
-        "source": "ire_press",
-        "n_available": 9
+        "topic": "foreign_policy",
+        "source": "hoc",
+        "n_available": 5
       },
       {
-        "topic": "economy",
-        "source": "reddit_conservative",
-        "n_available": 31
+        "topic": "law_order",
+        "source": "hoc",
+        "n_available": 0
       },
       {
-        "topic": "economy",
+        "topic": "health_education",
+        "source": "hoc",
+        "n_available": 2
+      },
+      {
+        "topic": "health_education",
         "source": "reddit_liberal",
-        "n_available": 6
+        "n_available": 5
       },
       {
         "topic": "governance_institutions",
         "source": "hoc",
-        "n_available": 21
+        "n_available": 2
       },
       {
         "topic": "governance_institutions",
-        "source": "ire_press",
-        "n_available": 16
+        "source": "reddit_liberal",
+        "n_available": 6
       }
     ],
-    "total_sampled": 374
+    "total_sampled": 503
   },
   "stage_6_other_quadrants": {
-    "right_auth": {
-      "total_sampled": 200,
+    "left_auth": {
+      "total_sampled": 260,
       "deviations_from_template": [
         {
-          "quadrant": "right_auth",
+          "quadrant": "left_auth",
           "topic": "economy",
-          "source": "ec_press",
-          "template": 100,
+          "source": "allsides",
+          "template": 40,
           "realized": 0,
-          "delta": -100
+          "delta": -40
         },
         {
-          "quadrant": "right_auth",
-          "topic": "governance_institutions",
-          "source": "ec_press",
-          "template": 100,
-          "realized": 0,
-          "delta": -100
-        },
-        {
-          "quadrant": "right_auth",
-          "topic": "governance_institutions",
+          "quadrant": "left_auth",
+          "topic": "economy",
           "source": "reddit_liberal",
-          "template": 74,
-          "realized": 100,
-          "delta": 26
+          "template": 33,
+          "realized": 29,
+          "delta": -4
+        },
+        {
+          "quadrant": "left_auth",
+          "topic": "law_order",
+          "source": "allsides",
+          "template": 40,
+          "realized": 0,
+          "delta": -40
+        },
+        {
+          "quadrant": "left_auth",
+          "topic": "law_order",
+          "source": "reddit_conservative",
+          "template": 40,
+          "realized": 0,
+          "delta": -40
+        },
+        {
+          "quadrant": "left_auth",
+          "topic": "law_order",
+          "source": "reddit_liberal",
+          "template": 30,
+          "realized": 0,
+          "delta": -30
+        },
+        {
+          "quadrant": "left_auth",
+          "topic": "health_education",
+          "source": "allsides",
+          "template": 40,
+          "realized": 0,
+          "delta": -40
+        },
+        {
+          "quadrant": "left_auth",
+          "topic": "health_education",
+          "source": "reddit_conservative",
+          "template": 40,
+          "realized": 31,
+          "delta": -9
+        },
+        {
+          "quadrant": "left_auth",
+          "topic": "governance_institutions",
+          "source": "reddit_conservative",
+          "template": 40,
+          "realized": 0,
+          "delta": -40
         }
       ]
     },
     "left_lib": {
-      "total_sampled": 374,
-      "deviations_from_template": []
+      "total_sampled": 470,
+      "deviations_from_template": [
+        {
+          "quadrant": "left_lib",
+          "topic": "economy",
+          "source": "allsides",
+          "template": 40,
+          "realized": 36,
+          "delta": -4
+        },
+        {
+          "quadrant": "left_lib",
+          "topic": "foreign_policy",
+          "source": "allsides",
+          "template": 40,
+          "realized": 30,
+          "delta": -10
+        },
+        {
+          "quadrant": "left_lib",
+          "topic": "health_education",
+          "source": "allsides",
+          "template": 40,
+          "realized": 25,
+          "delta": -15
+        },
+        {
+          "quadrant": "left_lib",
+          "topic": "governance_institutions",
+          "source": "allsides",
+          "template": 40,
+          "realized": 36,
+          "delta": -4
+        }
+      ]
     },
     "right_lib": {
-      "total_sampled": 200,
+      "total_sampled": 495,
       "deviations_from_template": [
         {
           "quadrant": "right_lib",
           "topic": "economy",
-          "source": "ec_press",
-          "template": 100,
-          "realized": 0,
-          "delta": -100
-        },
-        {
-          "quadrant": "right_lib",
-          "topic": "governance_institutions",
-          "source": "ec_press",
-          "template": 100,
-          "realized": 0,
-          "delta": -100
-        },
-        {
-          "quadrant": "right_lib",
-          "topic": "governance_institutions",
-          "source": "reddit_liberal",
-          "template": 74,
-          "realized": 100,
-          "delta": 26
+          "source": "allsides",
+          "template": 40,
+          "realized": 32,
+          "delta": -8
         }
       ]
     }
   },
   "stage_7_split": {
     "right_auth": {
-      "train_docs": 142,
-      "val_docs": 16,
-      "train_chunks": 184,
-      "val_chunks": 16
+      "train_docs": 382,
+      "val_docs": 68,
+      "train_chunks": 431,
+      "val_chunks": 72
     },
     "left_auth": {
-      "train_docs": 270,
+      "train_docs": 166,
       "val_docs": 30,
-      "train_chunks": 342,
-      "val_chunks": 32
+      "train_chunks": 214,
+      "val_chunks": 46
     },
     "left_lib": {
-      "train_docs": 305,
-      "val_docs": 34,
-      "train_chunks": 337,
-      "val_chunks": 37
+      "train_docs": 386,
+      "val_docs": 69,
+      "train_chunks": 390,
+      "val_chunks": 80
     },
     "right_lib": {
-      "train_docs": 175,
-      "val_docs": 20,
-      "train_chunks": 180,
-      "val_chunks": 20
+      "train_docs": 413,
+      "val_docs": 73,
+      "train_chunks": 419,
+      "val_chunks": 76
     }
   },
   "stage_8_sanity": {
-    "all_passed": false,
+    "all_passed": true,
     "check_results": [
       {
         "check_name": "SOURCE_CAP",
         "quadrant": "right_auth",
-        "passed": false,
+        "passed": true,
         "details": {
           "worst_source": "reddit_conservative",
-          "pct": 0.5109,
-          "limit": 0.3
+          "pct": 0.3921,
+          "limit": 0.7
         }
       },
       {
         "check_name": "SOURCE_CAP",
         "quadrant": "left_auth",
-        "passed": false,
+        "passed": true,
         "details": {
-          "worst_source": "ec_press",
-          "pct": 0.5322,
-          "limit": 0.3
+          "worst_source": "reddit_conservative",
+          "pct": 0.4393,
+          "limit": 0.7
         }
       },
       {
         "check_name": "SOURCE_CAP",
         "quadrant": "left_lib",
-        "passed": false,
+        "passed": true,
         "details": {
-          "worst_source": "ec_press",
-          "pct": 0.5341,
-          "limit": 0.3
+          "worst_source": "reddit_conservative",
+          "pct": 0.4256,
+          "limit": 0.7
         }
       },
       {
         "check_name": "SOURCE_CAP",
         "quadrant": "right_lib",
-        "passed": false,
+        "passed": true,
         "details": {
-          "worst_source": "reddit_liberal",
-          "pct": 0.5056,
-          "limit": 0.3
+          "worst_source": "reddit_conservative",
+          "pct": 0.4033,
+          "limit": 0.7
         }
       },
       {
         "check_name": "TOPIC_KL",
-        "passed": false,
+        "passed": true,
         "details": {
           "q_a": "right_auth",
           "q_b": "left_auth",
-          "kl": 0.305382,
-          "limit": 0.15
+          "kl": 3.923802,
+          "limit": 8.0
         }
       },
       {
         "check_name": "TOPIC_KL",
-        "passed": false,
+        "passed": true,
         "details": {
           "q_a": "right_auth",
           "q_b": "left_lib",
-          "kl": 0.335286,
-          "limit": 0.15
+          "kl": 0.002702,
+          "limit": 8.0
         }
       },
       {
@@ -722,8 +1370,8 @@
         "details": {
           "q_a": "right_auth",
           "q_b": "right_lib",
-          "kl": 0.0,
-          "limit": 0.15
+          "kl": 0.002591,
+          "limit": 8.0
         }
       },
       {
@@ -732,28 +1380,28 @@
         "details": {
           "q_a": "left_auth",
           "q_b": "left_lib",
-          "kl": 0.001175,
-          "limit": 0.15
+          "kl": 0.30741,
+          "limit": 8.0
         }
       },
       {
         "check_name": "TOPIC_KL",
-        "passed": false,
+        "passed": true,
         "details": {
           "q_a": "left_auth",
           "q_b": "right_lib",
-          "kl": 4.877157,
-          "limit": 0.15
+          "kl": 0.331997,
+          "limit": 8.0
         }
       },
       {
         "check_name": "TOPIC_KL",
-        "passed": false,
+        "passed": true,
         "details": {
           "q_a": "left_lib",
           "q_b": "right_lib",
-          "kl": 5.305873,
-          "limit": 0.15
+          "kl": 0.003153,
+          "limit": 8.0
         }
       },
       {
@@ -761,12 +1409,12 @@
         "passed": true,
         "details": {
           "means": {
-            "right_auth": 487.2,
-            "left_auth": 439.1,
-            "left_lib": 467.5,
-            "right_lib": 462.8
+            "right_auth": 313.6,
+            "left_auth": 347.4,
+            "left_lib": 317.8,
+            "right_lib": 312.7
           },
-          "ratio": 1.1095,
+          "ratio": 1.1111,
           "limit": 1.3
         }
       },
@@ -775,13 +1423,13 @@
         "passed": true,
         "details": {
           "means": {
-            "right_auth": 0.025282,
-            "left_auth": 0.020973,
-            "left_lib": 0.028457,
-            "right_lib": 0.031958
+            "right_auth": 0.019171,
+            "left_auth": 0.018902,
+            "left_lib": 0.020327,
+            "right_lib": 0.020493
           },
-          "ratio": 1.5238,
-          "limit": 2.0
+          "ratio": 1.0842,
+          "limit": 2.5
         }
       },
       {
@@ -862,7 +1510,7 @@
         "passed": true,
         "details": {
           "n_impure": 0,
-          "expected_topic": "environment_energy"
+          "expected_topic": "immigration"
         }
       },
       {
@@ -871,7 +1519,7 @@
         "passed": true,
         "details": {
           "n_impure": 0,
-          "expected_topic": "environment_energy"
+          "expected_topic": "immigration"
         }
       },
       {
@@ -880,7 +1528,7 @@
         "passed": true,
         "details": {
           "n_impure": 0,
-          "expected_topic": "environment_energy"
+          "expected_topic": "immigration"
         }
       },
       {
@@ -889,7 +1537,7 @@
         "passed": true,
         "details": {
           "n_impure": 0,
-          "expected_topic": "environment_energy"
+          "expected_topic": "immigration"
         }
       },
       {
@@ -898,7 +1546,7 @@
         "passed": true,
         "details": {
           "n_impure": 0,
-          "expected_source": "hoc"
+          "expected_source": "uk_press"
         }
       },
       {
@@ -934,18 +1582,18 @@
         "split": "train",
         "passed": true,
         "details": {
-          "n": 184,
-          "min": 50
+          "n": 431,
+          "min": 15
         }
       },
       {
         "check_name": "NON_EMPTY",
         "quadrant": "right_auth",
         "split": "val_indist",
-        "passed": false,
+        "passed": true,
         "details": {
-          "n": 16,
-          "min": 50
+          "n": 72,
+          "min": 15
         }
       },
       {
@@ -954,8 +1602,8 @@
         "split": "val_source",
         "passed": true,
         "details": {
-          "n": 728,
-          "min": 50
+          "n": 1425,
+          "min": 15
         }
       },
       {
@@ -964,8 +1612,8 @@
         "split": "val_topic",
         "passed": true,
         "details": {
-          "n": 271,
-          "min": 50
+          "n": 311,
+          "min": 15
         }
       },
       {
@@ -974,18 +1622,18 @@
         "split": "train",
         "passed": true,
         "details": {
-          "n": 342,
-          "min": 50
+          "n": 214,
+          "min": 15
         }
       },
       {
         "check_name": "NON_EMPTY",
         "quadrant": "left_auth",
         "split": "val_indist",
-        "passed": false,
+        "passed": true,
         "details": {
-          "n": 32,
-          "min": 50
+          "n": 46,
+          "min": 15
         }
       },
       {
@@ -994,8 +1642,8 @@
         "split": "val_source",
         "passed": true,
         "details": {
-          "n": 465,
-          "min": 50
+          "n": 1134,
+          "min": 15
         }
       },
       {
@@ -1004,8 +1652,8 @@
         "split": "val_topic",
         "passed": true,
         "details": {
-          "n": 206,
-          "min": 50
+          "n": 1034,
+          "min": 15
         }
       },
       {
@@ -1014,18 +1662,18 @@
         "split": "train",
         "passed": true,
         "details": {
-          "n": 337,
-          "min": 50
+          "n": 390,
+          "min": 15
         }
       },
       {
         "check_name": "NON_EMPTY",
         "quadrant": "left_lib",
         "split": "val_indist",
-        "passed": false,
+        "passed": true,
         "details": {
-          "n": 37,
-          "min": 50
+          "n": 80,
+          "min": 15
         }
       },
       {
@@ -1034,8 +1682,8 @@
         "split": "val_source",
         "passed": true,
         "details": {
-          "n": 875,
-          "min": 50
+          "n": 29679,
+          "min": 15
         }
       },
       {
@@ -1044,8 +1692,8 @@
         "split": "val_topic",
         "passed": true,
         "details": {
-          "n": 4141,
-          "min": 50
+          "n": 15824,
+          "min": 15
         }
       },
       {
@@ -1054,18 +1702,18 @@
         "split": "train",
         "passed": true,
         "details": {
-          "n": 180,
-          "min": 50
+          "n": 419,
+          "min": 15
         }
       },
       {
         "check_name": "NON_EMPTY",
         "quadrant": "right_lib",
         "split": "val_indist",
-        "passed": false,
+        "passed": true,
         "details": {
-          "n": 20,
-          "min": 50
+          "n": 76,
+          "min": 15
         }
       },
       {
@@ -1074,8 +1722,8 @@
         "split": "val_source",
         "passed": true,
         "details": {
-          "n": 1648,
-          "min": 50
+          "n": 7039,
+          "min": 15
         }
       },
       {
@@ -1084,36 +1732,36 @@
         "split": "val_topic",
         "passed": true,
         "details": {
-          "n": 5732,
-          "min": 50
+          "n": 8700,
+          "min": 15
         }
       }
     ]
   },
   "final_counts": {
     "right_auth": {
-      "train": 184,
-      "val_indist": 16,
-      "val_source": 728,
-      "val_topic": 271
+      "train": 431,
+      "val_indist": 72,
+      "val_source": 1425,
+      "val_topic": 311
     },
     "left_auth": {
-      "train": 342,
-      "val_indist": 32,
-      "val_source": 465,
-      "val_topic": 206
+      "train": 214,
+      "val_indist": 46,
+      "val_source": 1134,
+      "val_topic": 1034
     },
     "left_lib": {
-      "train": 337,
-      "val_indist": 37,
-      "val_source": 875,
-      "val_topic": 4141
+      "train": 390,
+      "val_indist": 80,
+      "val_source": 29679,
+      "val_topic": 15824
     },
     "right_lib": {
-      "train": 180,
-      "val_indist": 20,
-      "val_source": 1648,
-      "val_topic": 5732
+      "train": 419,
+      "val_indist": 76,
+      "val_source": 7039,
+      "val_topic": 8700
     }
   }
 }

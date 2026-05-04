@@ -339,7 +339,7 @@ def build_lora_model(
     log.info("loading base model: %s  precision=%s", base_model_name, precision)
     model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
-        torch_dtype=_PRECISION_MAP[precision],
+        dtype=_PRECISION_MAP[precision],
     )
     model = model.to("cuda" if torch.cuda.is_available() else "cpu")
     model.requires_grad_(False)

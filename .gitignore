@@ -9,7 +9,6 @@ __pycache__/
 .ipynb_checkpoints/
 
 # data (large files — transfer via rsync, not git)
-data/experts/raw/normalized/
 data/experts/quadrant-pools/
 
 # outputs / logs

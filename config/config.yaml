@@ -326,14 +326,13 @@ train_experts:
     early_stopping_patience: 1
   generation:
     enabled: true
-    max_new_tokens: 140
-    temperature: 0.7
-    do_sample: true
+    max_new_tokens: 100
+    do_sample: false
     fixed_prompts:
-      - "Write a short argument about the role of government in the economy."
-      - "What should be the state's approach to immigration policy?"
-      - "Describe your view on individual freedoms versus collective security."
-      - "What does a fair society look like to you?"
+      - "Answer directly in 120 words: What role should government play in reducing economic inequality?"
+      - "Answer directly in 120 words: How should a society balance individual freedom and public safety?"
+      - "Answer directly in 120 words: What makes a society fair?"
+      - "Answer directly in 120 words: How should governments protect civil liberties?"
   logging:
     logging_steps: 10
     report_to: "tensorboard"

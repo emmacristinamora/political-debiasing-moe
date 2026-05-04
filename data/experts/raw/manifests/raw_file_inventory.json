@@ -47,5 +47,12 @@
     "n_documents": 96977,
     "min_word_count": 100,
     "normalized_at": "2026-04-27T15:43:41.800779+00:00"
+  },
+  "hein_congressional": {
+    "raw_file": "/Users/stefi/Downloads/hein-daily",
+    "normalized_file": "/Users/stefi/Documents/GitHub/political-debiasing-moe/data/experts/raw/normalized/hein_congressional.jsonl",
+    "n_documents": 69,
+    "min_word_count": 100,
+    "normalized_at": "2026-05-04T19:28:47.227577+00:00"
   }
 }

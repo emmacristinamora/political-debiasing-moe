@@ -34,6 +34,9 @@ MANIFESTS_DIR  = PROJECT_ROOT / "data" / "experts" / "raw" / "manifests"
 # AllSides contains article excerpts (~60-90 words each), not full articles.
 # HoC contains individual speeches, many of which are brief interjections.
 # The rest are full documents where 100 words is reasonable.
+VALID_PARTIES = {"D", "R"}
+MIN_WORDS = 100
+MAX_WORDS = 800
 MIN_WORD_COUNT_BY_SOURCE: dict[str, int] = {
     "allsides":            30,
     "reddit_liberal":      100,
@@ -42,6 +45,7 @@ MIN_WORD_COUNT_BY_SOURCE: dict[str, int] = {
     "ec_press":            100,
     "uk_press":            100,
     "ire_press":           100,
+    "hein_congressional":  100,
 }
 
 VALID_SOURCES = {
@@ -52,6 +56,7 @@ VALID_SOURCES = {
     "ec_press",
     "uk_press",
     "ire_press",
+    "hein_congressional",
 }
 
 SOURCE_FILENAMES: dict[str, str] = {
@@ -62,6 +67,7 @@ SOURCE_FILENAMES: dict[str, str] = {
     "ec_press":            "EC-PressReleases_1985-2020_clean.RDS",
     "uk_press":            "UK-GovPressReleases.Rds",
     "ire_press":           "IRE-GovPressReleases.Rds",
+    "hein_congressional":  "hein-daily",
 }
 
 OUTPUT_FILENAMES: dict[str, str] = {
@@ -72,6 +78,7 @@ OUTPUT_FILENAMES: dict[str, str] = {
     "ec_press":            "ec_press_releases.jsonl",
     "uk_press":            "uk_gov_press_releases.jsonl",
     "ire_press":           "ire_gov_press_releases.jsonl",
+    "hein_congressional":  "hein_congressional.jsonl",
 }
 
 # RDS files that pyreadr cannot handle due to encoding — fall back to R subprocess
@@ -273,6 +280,163 @@ def save_json(payload: dict[str, Any], path: Path) -> None:
 
 
 # === NORMALIZERS ===
+
+def load_procedural_phrases(aux_dir: Path) -> set[str]:
+    path = aux_dir / "procedural.txt"
+    if not path.exists():
+        print(f"[hein] WARNING: procedural.txt not found at {path} — skipping filter")
+        return set()
+    phrases: set[str] = set()
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        next(f)  # skip header
+        for line in f:
+            parts = line.strip().split("|")
+            if parts:
+                phrases.add(parts[0].strip().lower())
+    print(f"[hein] Loaded {len(phrases):,} procedural phrases")
+    return phrases
+ 
+ 
+def load_speaker_map(hein_dir: Path, session: int) -> dict[str, dict[str, str]]:
+    """
+    Returns a dict mapping speech_id -> {party, chamber, state, lastname, firstname}
+    Only keeps D and R parties.
+    """
+    fname = f"{session:03d}_SpeakerMap.txt"
+    path = hein_dir / fname
+    if not path.exists():
+        print(f"[hein] WARNING: {fname} not found — skipping session {session}")
+        return {}
+ 
+    speaker_map: dict[str, dict[str, str]] = {}
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        next(f)  # skip header: speakerid|speech_id|lastname|firstname|chamber|state|gender|party|district|nonvoting
+        for line in f:
+            parts = line.strip().split("|")
+            if len(parts) < 8:
+                continue
+            speech_id = parts[1].strip()
+            party     = parts[7].strip().upper()
+            if party not in VALID_PARTIES:
+                continue
+            speaker_map[speech_id] = {
+                "party":     party,
+                "chamber":   parts[4].strip(),   # S or H
+                "state":     parts[5].strip(),
+                "lastname":  parts[2].strip(),
+                "firstname": parts[3].strip(),
+            }
+    return speaker_map
+ 
+ 
+def is_procedural(text: str, procedural_phrases: set[str]) -> bool:
+    if not procedural_phrases:
+        return False
+    text_lower = text.lower()
+    return any(phrase in text_lower for phrase in procedural_phrases)
+ 
+ 
+# ── NORMALIZER ────────────────────────────────────────────────────────────────
+ 
+def normalize_hein_session(
+    hein_dir: Path,
+    session: int,
+    procedural_phrases: set[str],
+) -> Iterator[Document]:
+    """Yield normalized Documents for one congressional session."""
+ 
+    speeches_file = hein_dir / f"speeches_{session:03d}.txt"
+    if not speeches_file.exists():
+        print(f"[hein] WARNING: speeches_{session:03d}.txt not found — skipping")
+        return
+ 
+    speaker_map = load_speaker_map(hein_dir, session)
+    if not speaker_map:
+        print(f"[hein] WARNING: no valid speaker map for session {session} — skipping")
+        return
+ 
+    print(f"[hein] Session {session:03d}: "
+          f"{len(speaker_map):,} mapped speakers, reading speeches ...")
+ 
+    stats = {"total": 0, "no_speaker": 0, "procedural": 0,
+             "too_short": 0, "too_long": 0, "written": 0}
+ 
+    with speeches_file.open("r", encoding="utf-8", errors="replace") as f:
+        next(f)  # skip header: speech_id|speech
+        for line in f:
+            stats["total"] += 1
+            parts = line.strip().split("|", 1)
+            if len(parts) < 2:
+                stats["no_speaker"] += 1
+                continue
+ 
+            speech_id = parts[0].strip()
+            raw_text  = parts[1].strip()
+ 
+            # Must have speaker metadata with valid party
+            if speech_id not in speaker_map:
+                stats["no_speaker"] += 1
+                continue
+ 
+            speaker = speaker_map[speech_id]
+            text    = normalize_whitespace(raw_text)
+            wc      = word_count(text)
+ 
+            if wc < MIN_WORDS:
+                stats["too_short"] += 1
+                continue
+            if wc > MAX_WORDS:
+                stats["too_long"] += 1
+                continue
+            if is_procedural(text, procedural_phrases):
+                stats["procedural"] += 1
+                continue
+ 
+            party   = speaker["party"]
+            chamber = speaker["chamber"]
+            state   = speaker["state"]
+            name    = f"{speaker['firstname']} {speaker['lastname']}".strip()
+ 
+            # Chamber label
+            chamber_full = "Senate" if chamber == "S" else "House"
+ 
+            # Party label for metadata
+            party_full = "Democrat" if party == "D" else "Republican"
+ 
+            document_id = f"hein_{session:03d}_{speech_id}"
+ 
+            yield Document(
+                document_id       = document_id,
+                text              = text,
+                source_name       = "Hein_CongressionalSpeeches",
+                source_family     = "institutional_speech",
+                language          = "en",
+                raw_dataset       = f"hein-daily_session_{session:03d}",
+                speaker_or_author = name if name.strip() else None,
+                metadata          = {
+                    "source_url":      None,
+                    "bias_rating":     None,
+                    "tags":            [],
+                    "party":           party_full,
+                    "party_code":      party,
+                    "chamber":         chamber_full,
+                    "state":           state,
+                    "session":         session,
+                    "speech_id":       speech_id,
+                    "subreddit":       None,
+                    "doc_type":        "speech",
+                    "word_count":      wc,
+                },
+            )
+            stats["written"] += 1
+ 
+    print(f"[hein] Session {session:03d} done | "
+          f"total={stats['total']:,} "
+          f"no_speaker={stats['no_speaker']:,} "
+          f"procedural={stats['procedural']:,} "
+          f"too_short={stats['too_short']:,} "
+          f"too_long={stats['too_long']:,} "
+          f"written={stats['written']:,}")
 
 def normalize_allsides(downloads_dir: Path) -> Iterator[Document]:
     path = downloads_dir / SOURCE_FILENAMES["allsides"]
@@ -575,6 +739,8 @@ def get_normalizer_iterator(source: str, downloads_dir: Path) -> Iterator[Docume
         return normalize_uk_press(downloads_dir)
     if source == "ire_press":
         return normalize_ire_press(downloads_dir)
+    if source == "hein_congressional":
+        return normalize_hein_congressional(downloads_dir)
     raise ValueError(f"Unknown source: {source}")
 
 
@@ -606,6 +772,14 @@ def update_manifest(
 
     save_json(manifest, manifest_path)
     print(f"[manifest] Updated {manifest_path}")
+    
+
+def normalize_hein_congressional(downloads_dir: Path) -> Iterator[Document]:
+    hein_dir = downloads_dir / "hein-daily"
+    procedural_phrases = load_procedural_phrases(hein_dir)
+    sessions = list(range(97, 115))
+    for session in sessions:
+        yield from normalize_hein_session(hein_dir, session, procedural_phrases)
 
 
 # === ORCHESTRATION ===

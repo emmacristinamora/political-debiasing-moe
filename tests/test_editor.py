@@ -28,6 +28,7 @@ Editor = moce_components.Editor
 EditorConfig = moce_components.EditorConfig
 EditorStepTrace = moce_components.EditorStepTrace
 EditorResult = moce_components.EditorResult
+GenerationConfig = moce_components.GenerationConfig
 PromptState = moce_components.PromptState
 RouterState = moce_components.RouterState
 ExpertOutput = moce_components.ExpertOutput
@@ -738,6 +739,84 @@ class RunEditingLoopOrchestrationTests(unittest.TestCase):
         )
         for key in CANONICAL_QUADRANT_ORDER:
             self.assertAlmostEqual(captured["initial_alpha"][key], 0.25, places=12)
+
+
+_UNSET = object()
+
+
+class EditorConstructionTests(unittest.TestCase):
+
+    def _build(
+        self,
+        *,
+        model: Any = _UNSET,
+        tokenizer: Any = _UNSET,
+        input_transformer: Any = _UNSET,
+        config: Any = _UNSET,
+        generation_config: Any = _UNSET,
+    ) -> Editor:
+        return Editor(
+            model=object() if model is _UNSET else model,
+            tokenizer=object() if tokenizer is _UNSET else tokenizer,
+            input_transformer=(
+                _FakeInputTransformer()
+                if input_transformer is _UNSET
+                else input_transformer
+            ),
+            config=EditorConfig() if config is _UNSET else config,
+            generation_config=(
+                GenerationConfig()
+                if generation_config is _UNSET
+                else generation_config
+            ),
+        )
+
+    def test_constructs_and_stores_attributes(self) -> None:
+        model = object()
+        tokenizer = object()
+        transformer = _FakeInputTransformer()
+        config = EditorConfig()
+        generation_config = GenerationConfig()
+        editor = Editor(
+            model=model,
+            tokenizer=tokenizer,
+            input_transformer=transformer,
+            config=config,
+            generation_config=generation_config,
+        )
+        self.assertIs(editor.model, model)
+        self.assertIs(editor.tokenizer, tokenizer)
+        self.assertIs(editor.input_transformer, transformer)
+        self.assertIs(editor.config, config)
+        self.assertIs(editor.generation_config, generation_config)
+
+    def test_invalid_config_type_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self._build(config="not a config")
+
+    def test_invalid_generation_config_type_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self._build(generation_config="not a generation config")
+
+    def test_input_transformer_none_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self._build(input_transformer=None)  # type: ignore[arg-type]
+
+    def test_invalid_initialization_mode_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self._build(config=EditorConfig(initialization_mode="not_a_mode"))
+
+    def test_max_edit_steps_zero_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self._build(config=EditorConfig(max_edit_steps=0))
+
+    def test_convergence_threshold_negative_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self._build(config=EditorConfig(convergence_threshold=-1))
+
+    def test_correction_beta_nan_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self._build(config=EditorConfig(correction_beta=float("nan")))
 
 
 if __name__ == "__main__":

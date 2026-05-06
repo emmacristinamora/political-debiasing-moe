@@ -2275,7 +2275,67 @@ class Editor:
         generation_config: GenerationConfig,
     ) -> None:
         # keep access to the base model, tokenizer, projector, and editor hyperparameters
-        raise NotImplementedError
+        if not isinstance(config, EditorConfig):
+            raise ValueError(
+                "config must be an EditorConfig, "
+                f"got {type(config).__name__}"
+            )
+        if not isinstance(generation_config, GenerationConfig):
+            raise ValueError(
+                "generation_config must be a GenerationConfig, "
+                f"got {type(generation_config).__name__}"
+            )
+        if input_transformer is None:
+            raise ValueError("input_transformer must not be None")
+
+        if config.initialization_mode not in {"router_policy", "uniform"}:
+            raise ValueError(
+                "EditorConfig.initialization_mode must be one of "
+                f"{{'router_policy', 'uniform'}}; got {config.initialization_mode!r}"
+            )
+
+        max_edit_steps = config.max_edit_steps
+        if (
+            not isinstance(max_edit_steps, int)
+            or isinstance(max_edit_steps, bool)
+            or max_edit_steps <= 0
+        ):
+            raise ValueError(
+                "EditorConfig.max_edit_steps must be a positive int, "
+                f"got {max_edit_steps!r}"
+            )
+
+        convergence_threshold = config.convergence_threshold
+        if (
+            not isinstance(convergence_threshold, (int, float))
+            or isinstance(convergence_threshold, bool)
+            or math.isnan(convergence_threshold)
+            or math.isinf(convergence_threshold)
+            or convergence_threshold < 0
+        ):
+            raise ValueError(
+                "EditorConfig.convergence_threshold must be a finite, "
+                "non-negative int or float, "
+                f"got {convergence_threshold!r}"
+            )
+
+        correction_beta = config.correction_beta
+        if (
+            not isinstance(correction_beta, (int, float))
+            or isinstance(correction_beta, bool)
+            or math.isnan(correction_beta)
+            or math.isinf(correction_beta)
+        ):
+            raise ValueError(
+                "EditorConfig.correction_beta must be a finite int or float, "
+                f"got {correction_beta!r}"
+            )
+
+        self.model = model
+        self.tokenizer = tokenizer
+        self.input_transformer = input_transformer
+        self.config = config
+        self.generation_config = generation_config
 
     def _validate_canonical_mapping(self, mapping: Any, name: str) -> None:
         """

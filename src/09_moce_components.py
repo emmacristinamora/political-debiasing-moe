@@ -395,6 +395,12 @@ class InputTransformer:
         self.tokenizer = tokenizer
         self.steering_config = steering_config
 
+        # encode_prompt runs the base model under no_grad; switch it to eval
+        # mode if it supports it so dropout / batch-norm style layers behave
+        # deterministically. device placement is the caller's responsibility.
+        if hasattr(self.model, "eval"):
+            self.model.eval()
+
         # populated by load_steering_vectors(); declared up-front so the
         # attribute set is stable even if load_steering_vectors raises
         self.economic_vector: torch.Tensor | None = None
@@ -796,16 +802,205 @@ class InputTransformer:
             )
         return validated
 
-    def encode_prompt(self, prompt_text: str) -> Any:
+    def encode_prompt(self, prompt_text: str) -> torch.Tensor:
         """
         Encode prompt into the same hidden-state space used to build steering vectors.
 
         Logic:
-        - run the prompt through the base model
-        - extract hidden states from the selected layers
-        - pool token representations according to the configured pooling method
+        - tokenize prompt as a single batch element (truncated at 512 tokens)
+        - move tokens to the model's parameter device when one is exposed
+        - run the base model with output_hidden_states=True under no_grad
+        - select hidden states at layer 20 (matches stage 05 document scoring;
+          selected_layers[-1] is intentionally not used)
+        - mean-pool over non-padding tokens using the attention mask
+        - L2-normalize the pooled vector and return it as detached float32, 1D
+
+        Returns:
+        - torch.Tensor of shape (hidden_dim,), dtype float32, unit L2 norm,
+          on the same device as the model's hidden states
+
+        Raises:
+        - ValueError naming the violated condition; no silent reshape, pad,
+          truncation, or device coercion of model/tokenizer outputs
         """
-        raise NotImplementedError
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            raise ValueError("prompt_text must be a non-empty string")
+
+        if not callable(self.tokenizer):
+            raise ValueError("InputTransformer.tokenizer must be callable")
+
+        # InputTransformer encoding is locked to layer 20 to keep inference
+        # geometry aligned with stage 05 document scoring; selected_layers[-1]
+        # would pick layer 24 by default, which is the wrong layer.
+        encoding_layer = 20
+        if encoding_layer not in self.steering_config.selected_layers:
+            raise ValueError(
+                "SteeringVectorConfig.selected_layers must include layer 20 "
+                "for InputTransformer encoding"
+            )
+
+        if self.economic_vector is None:
+            raise ValueError(
+                "InputTransformer.economic_vector is not set; "
+                "load_steering_vectors must run before encode_prompt"
+            )
+        expected_hidden_dim = int(self.economic_vector.shape[0])
+
+        tokens = self.tokenizer(
+            prompt_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+        )
+
+        for required_key in ("input_ids", "attention_mask"):
+            if required_key not in tokens:
+                raise ValueError(
+                    f"tokenizer output is missing required key {required_key!r}"
+                )
+
+        input_ids = tokens["input_ids"]
+        attention_mask = tokens["attention_mask"]
+
+        if not isinstance(input_ids, torch.Tensor):
+            raise ValueError(
+                f"tokenizer 'input_ids' must be a torch.Tensor, "
+                f"got {type(input_ids).__name__}"
+            )
+        if not isinstance(attention_mask, torch.Tensor):
+            raise ValueError(
+                f"tokenizer 'attention_mask' must be a torch.Tensor, "
+                f"got {type(attention_mask).__name__}"
+            )
+        if input_ids.dim() != 2:
+            raise ValueError(
+                f"tokenizer 'input_ids' must be a rank-2 tensor; "
+                f"got shape {tuple(input_ids.shape)}"
+            )
+        if attention_mask.dim() != 2:
+            raise ValueError(
+                f"tokenizer 'attention_mask' must be a rank-2 tensor; "
+                f"got shape {tuple(attention_mask.shape)}"
+            )
+        if input_ids.shape[0] != 1:
+            raise ValueError(
+                f"tokenizer 'input_ids' must have batch size 1; "
+                f"got shape {tuple(input_ids.shape)}"
+            )
+        if attention_mask.shape[0] != 1:
+            raise ValueError(
+                f"tokenizer 'attention_mask' must have batch size 1; "
+                f"got shape {tuple(attention_mask.shape)}"
+            )
+        if tuple(input_ids.shape) != tuple(attention_mask.shape):
+            raise ValueError(
+                f"tokenizer 'input_ids' shape {tuple(input_ids.shape)} does not "
+                f"match 'attention_mask' shape {tuple(attention_mask.shape)}"
+            )
+        if int(attention_mask.sum().item()) == 0:
+            raise ValueError(
+                "tokenizer 'attention_mask' contains no non-padding tokens"
+            )
+
+        # move tokens to the model's parameter device when available; the
+        # model itself is not relocated here (caller controls placement)
+        try:
+            model_device = next(self.model.parameters()).device
+        except (AttributeError, StopIteration):
+            model_device = None
+
+        if model_device is not None:
+            tokens = {
+                key: value.to(model_device) if isinstance(value, torch.Tensor) else value
+                for key, value in tokens.items()
+            }
+            attention_mask = tokens["attention_mask"]
+
+        with torch.no_grad():
+            outputs = self.model(
+                **tokens,
+                output_hidden_states=True,
+            )
+
+        if not hasattr(outputs, "hidden_states"):
+            raise ValueError(
+                "model output is missing 'hidden_states'; ensure the forward "
+                "pass is configured to return hidden states"
+            )
+        hidden_states = outputs.hidden_states
+        if hidden_states is None:
+            raise ValueError("model returned hidden_states=None")
+        if not isinstance(hidden_states, (list, tuple)):
+            raise ValueError(
+                f"model 'hidden_states' must be a list or tuple, "
+                f"got {type(hidden_states).__name__}"
+            )
+        if len(hidden_states) <= encoding_layer:
+            raise ValueError(
+                f"model produced {len(hidden_states)} hidden_states; "
+                f"layer index {encoding_layer} is out of range"
+            )
+
+        hidden = hidden_states[encoding_layer]
+        if not isinstance(hidden, torch.Tensor):
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] must be a torch.Tensor, "
+                f"got {type(hidden).__name__}"
+            )
+        if hidden.dim() != 3:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] must be a rank-3 tensor "
+                f"(batch, seq_len, hidden_dim); got shape {tuple(hidden.shape)}"
+            )
+        if hidden.shape[0] != 1:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] must have batch size 1; "
+                f"got shape {tuple(hidden.shape)}"
+            )
+        if hidden.shape[1] != attention_mask.shape[1]:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] sequence length "
+                f"{hidden.shape[1]} does not match attention_mask sequence "
+                f"length {attention_mask.shape[1]}"
+            )
+        if hidden.shape[2] != expected_hidden_dim:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] hidden_dim {hidden.shape[2]} "
+                f"does not match economic_vector hidden_dim {expected_hidden_dim}"
+            )
+
+        # mean-pool over non-padding tokens; mask is broadcast across the
+        # hidden dimension and the divisor is the per-batch token count
+        mask = attention_mask.to(device=hidden.device, dtype=hidden.dtype).unsqueeze(-1)
+        denominator = mask.sum(dim=1)
+        if not torch.all(denominator > 0).item():
+            raise ValueError(
+                "encode_prompt: attention_mask token count is zero; "
+                "cannot mean-pool over an empty token set"
+            )
+        pooled = (hidden * mask).sum(dim=1) / denominator
+        pooled = pooled.squeeze(0)
+
+        if pooled.dim() != 1:
+            raise ValueError(
+                f"pooled hidden state must be rank 1; got shape {tuple(pooled.shape)}"
+            )
+        if pooled.shape[0] != expected_hidden_dim:
+            raise ValueError(
+                f"pooled hidden state length {pooled.shape[0]} does not match "
+                f"economic_vector length {expected_hidden_dim}"
+            )
+
+        pooled = pooled.detach().to(dtype=torch.float32)
+        if not torch.isfinite(pooled).all().item():
+            raise ValueError("pooled hidden state contains NaN or inf entries")
+
+        norm = float(torch.linalg.vector_norm(pooled).item())
+        if not math.isfinite(norm) or norm <= 0.0:
+            raise ValueError(
+                "encoded prompt representation has non-positive or non-finite L2 norm"
+            )
+        return pooled / norm
 
     def maybe_center_representation(self, hidden_representation: Any) -> Any:
         """

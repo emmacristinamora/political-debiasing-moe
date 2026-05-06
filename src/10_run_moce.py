@@ -1,4 +1,4 @@
-# src/07_run_moce.py
+# src/10_run_moce.py
 
 
 # === IMPORTS ===
@@ -14,16 +14,16 @@ from typing import Any
 
 # === CONFIG ===
 
-# src/06_moce_components.py begins with a digit and cannot be imported via
+# src/09_moce_components.py begins with a digit and cannot be imported via
 # normal "import" syntax; we load it explicitly by absolute path.
-COMPONENTS_PATH = Path(__file__).resolve().parent / "06_moce_components.py"
+COMPONENTS_PATH = Path(__file__).resolve().parent / "09_moce_components.py"
 
 
 # === HELPERS ===
 
 def _load_components_module() -> Any:
     """
-    Load src/06_moce_components.py via importlib.
+    Load src/09_moce_components.py via importlib.
 
     Returns:
         The loaded module exposing Router and RouterConfig.

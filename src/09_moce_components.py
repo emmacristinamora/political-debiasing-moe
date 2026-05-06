@@ -1,4 +1,4 @@
-# src/06_moce_architecture.py
+# src/09_moce_components.py
 
 
 # === IMPORTS ===
@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Dict, List, Tuple
+from typing import Any
 
 import torch
 from torch import nn
@@ -376,65 +376,861 @@ class InputTransformer:
     - this component is not generic preprocessing; it is the prompt-state estimator
     """
 
+    # supported vector_method values; both live in artifact["final_vectors"]
+    # and in artifact["per_layer"][L][method]["vector"] (see 04_build_steering_vectors.py)
+    _SUPPORTED_VECTOR_METHODS: tuple[str, ...] = (
+        "mean_difference",
+        "logistic_regression",
+    )
+
+    # encode_prompt is locked to one transformer layer so prompt-side scoring
+    # operates in the same activation space as stage 05 document scoring; the
+    # constant lives here (rather than as a SteeringVectorConfig field) because
+    # making it configurable in v1 would silently desync steering-vector
+    # geometry across the pipeline.
+    ENCODING_LAYER: int = 20
+
+    # default tokenizer truncation length used by encode_prompt; matches the
+    # ceiling chosen for prompt-side encoding in step 3.
+    DEFAULT_MAX_LENGTH: int = 512
+
     def __init__(
         self,
         model: Any,
         tokenizer: Any,
         steering_config: SteeringVectorConfig,
     ) -> None:
-        # store base model, tokenizer, and steering-vector settings
-        # load economic/social vectors and any optional centering reference
-        raise NotImplementedError
+        # model and tokenizer are stored for later steps (encode_prompt) but
+        # are not consulted here; vector loading is purely from disk artifacts
+        self.model = model
+        self.tokenizer = tokenizer
+        self.steering_config = steering_config
+
+        # fail-fast on configuration choices that contradict encode_prompt's
+        # implementation. encode_prompt only implements mean pooling, and the
+        # ENCODING_LAYER must appear in selected_layers so the per-layer
+        # steering-vector artifact has been built for it (per-layer mode) and
+        # so any layer-aware downstream tooling stays in agreement.
+        if self.steering_config.pooling_method != "mean":
+            raise ValueError(
+                "InputTransformer only supports pooling_method='mean' for v1; "
+                f"got {self.steering_config.pooling_method!r}"
+            )
+        if self.ENCODING_LAYER not in self.steering_config.selected_layers:
+            raise ValueError(
+                f"SteeringVectorConfig.selected_layers must include layer "
+                f"{self.ENCODING_LAYER} for InputTransformer encoding; "
+                f"got {list(self.steering_config.selected_layers)}"
+            )
+
+        # encode_prompt runs the base model under no_grad; switch it to eval
+        # mode if it supports it so dropout / batch-norm style layers behave
+        # deterministically. device placement is the caller's responsibility.
+        if hasattr(self.model, "eval"):
+            self.model.eval()
+
+        # populated by load_steering_vectors(); declared up-front so the
+        # attribute set is stable even if load_steering_vectors raises
+        self.economic_vector: torch.Tensor | None = None
+        self.social_vector: torch.Tensor | None = None
+        self.quadrant_vectors: dict[str, torch.Tensor] = {}
+        self.neutral_reference: torch.Tensor | None = None
+
+        # fail-early: invalid artifacts surface here, not at the first
+        # transform() call from the engine
+        self.load_steering_vectors()
 
     def load_steering_vectors(self) -> None:
         """
-        Load economic and social steering-vector artifacts from disk.
+        Load economic and social steering-vector artifacts from disk and build
+        the canonical quadrant vectors.
 
         Logic:
-        - support both final aggregated vectors and per-layer vectors
-        - validate that vector metadata matches inference assumptions
-        """
-        raise NotImplementedError
+        - validate vector_method against the supported set
+        - load both axis artifacts via torch.load(map_location="cpu")
+        - select either the final aggregated vector or a per-layer aggregate
+          across SteeringVectorConfig.selected_layers (each per-layer vector
+          is normalized before averaging; the average is then re-normalized)
+        - validate selected vectors (1D, finite, non-empty, matching shapes)
+          and store as float32 CPU tensors with unit L2 norm
+        - construct the four canonical quadrant vectors via the documented
+          sign convention:
+            left_lib   = normalize(-econ - social)
+            left_auth  = normalize(-econ + social)
+            right_lib  = normalize(+econ - social)
+            right_auth = normalize(+econ + social)
+        - if steering_config.use_centering, additionally load and validate the
+          neutral reference vector (same shape as the axis vectors)
 
-    def encode_prompt(self, prompt_text: str) -> Any:
+        Raises:
+        - FileNotFoundError if any required artifact path does not exist
+        - ValueError on any schema, shape, dtype, or finiteness violation
+        """
+        cfg = self.steering_config
+
+        if cfg.vector_method not in self._SUPPORTED_VECTOR_METHODS:
+            raise ValueError(
+                "SteeringVectorConfig.vector_method must be one of "
+                f"{list(self._SUPPORTED_VECTOR_METHODS)}; got {cfg.vector_method!r}"
+            )
+
+        economic_artifact = self._load_vector_artifact(
+            cfg.economic_vector_path, "economic"
+        )
+        social_artifact = self._load_vector_artifact(
+            cfg.social_vector_path, "social"
+        )
+
+        # in per-layer mode, post-aggregation diagnostics need to point users at
+        # the averaging step (the only place a non-zero set of inputs can yield
+        # a zero output via cancellation), not at the raw axis vector
+        if cfg.use_final_aggregated_vectors:
+            economic_raw = self._select_final_vector(
+                economic_artifact, "economic", cfg.vector_method, cfg.economic_vector_path
+            )
+            social_raw = self._select_final_vector(
+                social_artifact, "social", cfg.vector_method, cfg.social_vector_path
+            )
+            economic_label = "economic_vector"
+            social_label = "social_vector"
+        else:
+            economic_raw = self._select_per_layer_aggregated(
+                economic_artifact, "economic", cfg.vector_method,
+                cfg.selected_layers, cfg.economic_vector_path,
+            )
+            social_raw = self._select_per_layer_aggregated(
+                social_artifact, "social", cfg.vector_method,
+                cfg.selected_layers, cfg.social_vector_path,
+            )
+            economic_label = "economic_vector (per-layer mean)"
+            social_label = "social_vector (per-layer mean)"
+
+        economic_validated = self._validate_vector(economic_raw, economic_label)
+        social_validated = self._validate_vector(social_raw, social_label)
+
+        if economic_validated.shape != social_validated.shape:
+            raise ValueError(
+                f"{economic_label} shape {tuple(economic_validated.shape)} does not "
+                f"match {social_label} shape {tuple(social_validated.shape)}"
+            )
+
+        self.economic_vector = self._normalize_vector(economic_validated, economic_label)
+        self.social_vector = self._normalize_vector(social_validated, social_label)
+
+        self.quadrant_vectors = self._build_quadrant_vectors(
+            self.economic_vector, self.social_vector
+        )
+
+        self.neutral_reference = self._maybe_load_neutral_reference()
+
+    def _load_vector_artifact(self, path: Path, axis_name: str) -> dict[str, Any]:
+        """
+        Load a steering-vector .pt artifact and confirm it is a dict.
+
+        Logic:
+        - require an existing file path (FileNotFoundError otherwise)
+        - torch.load with map_location="cpu" and weights_only=False (the
+          artifact contains nested Python dicts in addition to tensors)
+        - the top-level payload must be a dict
+        """
+        if not isinstance(path, Path):
+            raise ValueError(
+                f"{axis_name}_vector_path must be a pathlib.Path, "
+                f"got {type(path).__name__}"
+            )
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{axis_name} steering vector artifact not found: {path}"
+            )
+        artifact = torch.load(path, map_location="cpu", weights_only=False)
+        if not isinstance(artifact, dict):
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} must be a dict, "
+                f"got {type(artifact).__name__}"
+            )
+        return artifact
+
+    def _select_final_vector(
+        self,
+        artifact: dict[str, Any],
+        axis_name: str,
+        vector_method: str,
+        path: Path,
+    ) -> Any:
+        """
+        Pick the final aggregated vector for the requested method.
+
+        Schema (from 04_build_steering_vectors.py):
+            artifact["final_vectors"][vector_method] -> torch.Tensor
+        """
+        if "final_vectors" not in artifact:
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} is missing "
+                f"required key 'final_vectors'"
+            )
+        final_vectors = artifact["final_vectors"]
+        if not isinstance(final_vectors, dict):
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} field "
+                f"'final_vectors' must be a dict, got {type(final_vectors).__name__}"
+            )
+        if vector_method not in final_vectors:
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} has no "
+                f"final_vectors[{vector_method!r}]; available keys: "
+                f"{sorted(final_vectors.keys())}"
+            )
+        return final_vectors[vector_method]
+
+    def _select_per_layer_aggregated(
+        self,
+        artifact: dict[str, Any],
+        axis_name: str,
+        vector_method: str,
+        selected_layers: list[int],
+        path: Path,
+    ) -> torch.Tensor:
+        """
+        Aggregate per-layer vectors at SteeringVectorConfig.selected_layers.
+
+        Logic:
+        - validate selected_layers is a non-empty list of ints
+        - for each selected layer, read artifact["per_layer"][L][method]["vector"]
+          and normalize it (so layers contribute equally regardless of raw scale)
+        - average the normalized layer vectors and return the unnormalized
+          mean; the caller normalizes once more downstream
+        """
+        if not isinstance(selected_layers, (list, tuple)) or len(selected_layers) == 0:
+            raise ValueError(
+                "SteeringVectorConfig.selected_layers must be a non-empty list "
+                f"of ints when use_final_aggregated_vectors=False; got {selected_layers!r}"
+            )
+        if "per_layer" not in artifact:
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} is missing "
+                f"required key 'per_layer'"
+            )
+        per_layer = artifact["per_layer"]
+        if not isinstance(per_layer, dict):
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} field "
+                f"'per_layer' must be a dict, got {type(per_layer).__name__}"
+            )
+
+        normalized_layer_vectors: list[torch.Tensor] = []
+        reference_shape: tuple[int, ...] | None = None
+        seen_layers: set[int] = set()
+        for layer in selected_layers:
+            if not isinstance(layer, int) or isinstance(layer, bool):
+                raise ValueError(
+                    f"SteeringVectorConfig.selected_layers entries must be int; "
+                    f"got {type(layer).__name__}"
+                )
+            if layer in seen_layers:
+                raise ValueError(
+                    f"SteeringVectorConfig.selected_layers contains duplicate "
+                    f"layer {layer}; duplicates would silently reweight the "
+                    f"per-layer aggregate. Got {list(selected_layers)!r}"
+                )
+            seen_layers.add(layer)
+            if layer not in per_layer:
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} per_layer "
+                    f"is missing layer {layer}; available layers: "
+                    f"{sorted(per_layer.keys())}"
+                )
+            layer_payload = per_layer[layer]
+            if not isinstance(layer_payload, dict):
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} "
+                    f"per_layer[{layer}] must be a dict, got {type(layer_payload).__name__}"
+                )
+            if vector_method not in layer_payload:
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} "
+                    f"per_layer[{layer}] is missing method {vector_method!r}; "
+                    f"available: {sorted(layer_payload.keys())}"
+                )
+            method_payload = layer_payload[vector_method]
+            if not isinstance(method_payload, dict) or "vector" not in method_payload:
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} "
+                    f"per_layer[{layer}][{vector_method!r}] must be a dict "
+                    f"containing key 'vector'"
+                )
+            label = f"{axis_name} per_layer[{layer}][{vector_method!r}].vector"
+            validated = self._validate_vector(method_payload["vector"], label)
+            if reference_shape is None:
+                reference_shape = tuple(validated.shape)
+            elif tuple(validated.shape) != reference_shape:
+                raise ValueError(
+                    f"{axis_name} per-layer vectors have inconsistent shape: "
+                    f"layer {layer} has shape {tuple(validated.shape)} "
+                    f"vs reference {reference_shape}"
+                )
+            normalized_layer_vectors.append(self._normalize_vector(validated, label))
+
+        return torch.stack(normalized_layer_vectors).mean(dim=0)
+
+    def _validate_vector(self, value: Any, name: str) -> torch.Tensor:
+        """
+        Coerce value to a 1D float32 CPU tensor and validate it.
+
+        Logic:
+        - accept torch.Tensor, list, tuple, or numpy ndarray (detected by
+          duck-typing on type module name to avoid a hard numpy import)
+        - require non-empty 1D shape
+        - require finite entries (no NaN, no inf) after coercion
+        - return a contiguous float32 CPU tensor
+
+        Note: this helper does NOT enforce a positive norm; callers that
+        normalize delegate that check to _normalize_vector.
+        """
+        if value is None:
+            raise ValueError(f"{name} is None")
+
+        if isinstance(value, torch.Tensor):
+            tensor = value
+        elif isinstance(value, (list, tuple)):
+            try:
+                tensor = torch.tensor(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"{name} could not be converted to a tensor: {exc}"
+                ) from exc
+        elif (
+            type(value).__module__.split(".")[0] == "numpy"
+            and type(value).__name__ == "ndarray"
+        ):
+            try:
+                tensor = torch.from_numpy(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"{name} could not be converted from numpy ndarray: {exc}"
+                ) from exc
+        else:
+            raise ValueError(
+                f"{name} must be a torch.Tensor, list, tuple, or numpy ndarray; "
+                f"got {type(value).__name__}"
+            )
+
+        if tensor.dim() != 1:
+            raise ValueError(
+                f"{name} must be a 1D vector; got shape {tuple(tensor.shape)}"
+            )
+        if tensor.numel() == 0:
+            raise ValueError(f"{name} is empty (length 0)")
+
+        tensor = tensor.detach().to(dtype=torch.float32, device="cpu").contiguous()
+
+        if not torch.isfinite(tensor).all().item():
+            raise ValueError(f"{name} contains NaN or inf entries")
+        return tensor
+
+    def _normalize_vector(self, vector: torch.Tensor, name: str) -> torch.Tensor:
+        """
+        Return vector / ||vector||_2; raise if the norm is not strictly positive.
+        """
+        norm = float(torch.linalg.vector_norm(vector).item())
+        if not math.isfinite(norm) or norm <= 0.0:
+            raise ValueError(
+                f"{name} has non-positive or non-finite L2 norm ({norm}); "
+                "cannot normalize"
+            )
+        return (vector / norm).to(dtype=torch.float32)
+
+    def _build_quadrant_vectors(
+        self,
+        economic_vector: torch.Tensor,
+        social_vector: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
+        """
+        Build the four normalized canonical quadrant vectors.
+
+        Sign convention:
+            +economic = right, -economic = left
+            +social   = authoritarian, -social = libertarian
+        Combinations:
+            left_lib   = normalize(-econ - social)
+            left_auth  = normalize(-econ + social)
+            right_lib  = normalize(+econ - social)
+            right_auth = normalize(+econ + social)
+        """
+        raw_combinations: dict[str, torch.Tensor] = {
+            "left_lib": -economic_vector - social_vector,
+            "left_auth": -economic_vector + social_vector,
+            "right_lib": economic_vector - social_vector,
+            "right_auth": economic_vector + social_vector,
+        }
+        # iterate canonical order so the resulting dict has a deterministic
+        # construction order; consumers must still address it by key
+        quadrants: dict[str, torch.Tensor] = {}
+        for key in CANONICAL_QUADRANT_ORDER:
+            raw_vector = raw_combinations[key]
+            label = f"quadrant_vectors[{key!r}]"
+            if not torch.isfinite(raw_vector).all().item():
+                raise ValueError(f"{label} contains NaN or inf entries")
+            quadrants[key] = self._normalize_vector(raw_vector, label)
+        return quadrants
+
+    def _maybe_load_neutral_reference(self) -> torch.Tensor | None:
+        """
+        Load and validate the neutral reference if centering is enabled.
+
+        Logic:
+        - returns None when use_centering=False
+        - requires neutral_reference_path when use_centering=True
+        - accepts either a raw tensor/list/tuple/ndarray or a dict with a
+          'vector' key (mirrors the per-axis artifact convention)
+        - the resulting vector must match the shape of the loaded axis
+          vectors so projection and centering operate in the same space
+        """
+        cfg = self.steering_config
+        if not cfg.use_centering:
+            return None
+        if cfg.neutral_reference_path is None:
+            raise ValueError(
+                "SteeringVectorConfig.use_centering=True requires "
+                "neutral_reference_path; got None"
+            )
+        path = cfg.neutral_reference_path
+        if not isinstance(path, Path):
+            raise ValueError(
+                f"SteeringVectorConfig.neutral_reference_path must be a "
+                f"pathlib.Path, got {type(path).__name__}"
+            )
+        if not path.exists():
+            raise FileNotFoundError(
+                f"neutral reference artifact not found: {path}"
+            )
+
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        if isinstance(payload, dict):
+            if "vector" not in payload:
+                raise ValueError(
+                    f"neutral reference dict at {path} is missing required "
+                    f"key 'vector'; available: {sorted(payload.keys())}"
+                )
+            candidate = payload["vector"]
+        else:
+            candidate = payload
+
+        validated = self._validate_vector(candidate, "neutral_reference")
+        if self.economic_vector is None:
+            # defensive: load_steering_vectors sets this before calling us;
+            # if we ever reordered, surface it loudly rather than skip the check
+            raise ValueError(
+                "neutral reference loading reached before economic_vector was "
+                "set; this indicates an internal ordering bug in load_steering_vectors"
+            )
+        if validated.shape != self.economic_vector.shape:
+            raise ValueError(
+                f"neutral_reference shape {tuple(validated.shape)} does not "
+                f"match economic_vector shape {tuple(self.economic_vector.shape)}"
+            )
+        return validated
+
+    def encode_prompt(self, prompt_text: str) -> torch.Tensor:
         """
         Encode prompt into the same hidden-state space used to build steering vectors.
 
         Logic:
-        - run the prompt through the base model
-        - extract hidden states from the selected layers
-        - pool token representations according to the configured pooling method
-        """
-        raise NotImplementedError
+        - tokenize prompt as a single batch element (truncated at 512 tokens)
+        - move tokens to the model's parameter device when one is exposed
+        - run the base model with output_hidden_states=True under no_grad
+        - select hidden states at layer 20 (matches stage 05 document scoring;
+          selected_layers[-1] is intentionally not used)
+        - mean-pool over non-padding tokens using the attention mask
+        - L2-normalize the pooled vector and return it as detached float32, 1D
 
-    def maybe_center_representation(self, hidden_representation: Any) -> Any:
+        Returns:
+        - torch.Tensor of shape (hidden_dim,), dtype float32, unit L2 norm,
+          on the same device as the model's hidden states
+
+        Raises:
+        - ValueError naming the violated condition; no silent reshape, pad,
+          truncation, or device coercion of model/tokenizer outputs
+        """
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            raise ValueError("prompt_text must be a non-empty string")
+
+        if not callable(self.tokenizer):
+            raise ValueError("InputTransformer.tokenizer must be callable")
+
+        # InputTransformer encoding is locked to a single transformer layer
+        # to keep inference geometry aligned with stage 05 document scoring;
+        # selected_layers[-1] would pick the wrong layer by default. The
+        # config-side check below is also enforced in __init__; it stays here
+        # as a defensive guard against post-construction mutation of
+        # steering_config.
+        encoding_layer = self.ENCODING_LAYER
+        if encoding_layer not in self.steering_config.selected_layers:
+            raise ValueError(
+                f"SteeringVectorConfig.selected_layers must include layer "
+                f"{encoding_layer} for InputTransformer encoding"
+            )
+
+        if self.economic_vector is None:
+            raise ValueError(
+                "InputTransformer.economic_vector is not set; "
+                "load_steering_vectors must run before encode_prompt"
+            )
+        expected_hidden_dim = int(self.economic_vector.shape[0])
+
+        tokens = self.tokenizer(
+            prompt_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=self.DEFAULT_MAX_LENGTH,
+        )
+
+        for required_key in ("input_ids", "attention_mask"):
+            if required_key not in tokens:
+                raise ValueError(
+                    f"tokenizer output is missing required key {required_key!r}"
+                )
+
+        input_ids = tokens["input_ids"]
+        attention_mask = tokens["attention_mask"]
+
+        if not isinstance(input_ids, torch.Tensor):
+            raise ValueError(
+                f"tokenizer 'input_ids' must be a torch.Tensor, "
+                f"got {type(input_ids).__name__}"
+            )
+        if not isinstance(attention_mask, torch.Tensor):
+            raise ValueError(
+                f"tokenizer 'attention_mask' must be a torch.Tensor, "
+                f"got {type(attention_mask).__name__}"
+            )
+        if input_ids.dim() != 2:
+            raise ValueError(
+                f"tokenizer 'input_ids' must be a rank-2 tensor; "
+                f"got shape {tuple(input_ids.shape)}"
+            )
+        if attention_mask.dim() != 2:
+            raise ValueError(
+                f"tokenizer 'attention_mask' must be a rank-2 tensor; "
+                f"got shape {tuple(attention_mask.shape)}"
+            )
+        if input_ids.shape[0] != 1:
+            raise ValueError(
+                f"tokenizer 'input_ids' must have batch size 1; "
+                f"got shape {tuple(input_ids.shape)}"
+            )
+        if attention_mask.shape[0] != 1:
+            raise ValueError(
+                f"tokenizer 'attention_mask' must have batch size 1; "
+                f"got shape {tuple(attention_mask.shape)}"
+            )
+        if tuple(input_ids.shape) != tuple(attention_mask.shape):
+            raise ValueError(
+                f"tokenizer 'input_ids' shape {tuple(input_ids.shape)} does not "
+                f"match 'attention_mask' shape {tuple(attention_mask.shape)}"
+            )
+        if int(attention_mask.sum().item()) == 0:
+            raise ValueError(
+                "tokenizer 'attention_mask' contains no non-padding tokens"
+            )
+
+        # move tokens to the model's parameter device when available; the
+        # model itself is not relocated here (caller controls placement)
+        try:
+            model_device = next(self.model.parameters()).device
+        except (AttributeError, StopIteration):
+            model_device = None
+
+        if model_device is not None:
+            tokens = {
+                key: value.to(model_device) if isinstance(value, torch.Tensor) else value
+                for key, value in tokens.items()
+            }
+            attention_mask = tokens["attention_mask"]
+
+        with torch.no_grad():
+            outputs = self.model(
+                **tokens,
+                output_hidden_states=True,
+            )
+
+        if not hasattr(outputs, "hidden_states"):
+            raise ValueError(
+                "model output is missing 'hidden_states'; ensure the forward "
+                "pass is configured to return hidden states"
+            )
+        hidden_states = outputs.hidden_states
+        if hidden_states is None:
+            raise ValueError("model returned hidden_states=None")
+        if not isinstance(hidden_states, (list, tuple)):
+            raise ValueError(
+                f"model 'hidden_states' must be a list or tuple, "
+                f"got {type(hidden_states).__name__}"
+            )
+        if len(hidden_states) <= encoding_layer:
+            raise ValueError(
+                f"model produced {len(hidden_states)} hidden_states; "
+                f"layer index {encoding_layer} is out of range"
+            )
+
+        hidden = hidden_states[encoding_layer]
+        if not isinstance(hidden, torch.Tensor):
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] must be a torch.Tensor, "
+                f"got {type(hidden).__name__}"
+            )
+        if hidden.dim() != 3:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] must be a rank-3 tensor "
+                f"(batch, seq_len, hidden_dim); got shape {tuple(hidden.shape)}"
+            )
+        if hidden.shape[0] != 1:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] must have batch size 1; "
+                f"got shape {tuple(hidden.shape)}"
+            )
+        if hidden.shape[1] != attention_mask.shape[1]:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] sequence length "
+                f"{hidden.shape[1]} does not match attention_mask sequence "
+                f"length {attention_mask.shape[1]}"
+            )
+        if hidden.shape[2] != expected_hidden_dim:
+            raise ValueError(
+                f"hidden_states[{encoding_layer}] hidden_dim {hidden.shape[2]} "
+                f"does not match economic_vector hidden_dim {expected_hidden_dim}"
+            )
+
+        # mean-pool over non-padding tokens; mask is broadcast across the
+        # hidden dimension and the divisor is the per-batch token count
+        mask = attention_mask.to(device=hidden.device, dtype=hidden.dtype).unsqueeze(-1)
+        denominator = mask.sum(dim=1)
+        if not torch.all(denominator > 0).item():
+            raise ValueError(
+                "encode_prompt: attention_mask token count is zero; "
+                "cannot mean-pool over an empty token set"
+            )
+        pooled = (hidden * mask).sum(dim=1) / denominator
+        pooled = pooled.squeeze(0)
+
+        if pooled.dim() != 1:
+            raise ValueError(
+                f"pooled hidden state must be rank 1; got shape {tuple(pooled.shape)}"
+            )
+        if pooled.shape[0] != expected_hidden_dim:
+            raise ValueError(
+                f"pooled hidden state length {pooled.shape[0]} does not match "
+                f"economic_vector length {expected_hidden_dim}"
+            )
+
+        pooled = pooled.detach().to(dtype=torch.float32)
+        if not torch.isfinite(pooled).all().item():
+            raise ValueError("pooled hidden state contains NaN or inf entries")
+
+        norm = float(torch.linalg.vector_norm(pooled).item())
+        if not math.isfinite(norm) or norm <= 0.0:
+            raise ValueError(
+                "encoded prompt representation has non-positive or non-finite L2 norm"
+            )
+        return pooled / norm
+
+    def _validate_hidden_representation(
+        self,
+        hidden_representation: Any,
+        name: str,
+    ) -> torch.Tensor:
+        """
+        Validate a 1D numeric hidden representation and return it as detached float32.
+
+        The returned tensor preserves the input device. Length is enforced
+        against self.economic_vector.shape[0] so axis/quadrant projections
+        stay in the same activation space the steering vectors were learned in.
+        """
+        if self.economic_vector is None:
+            raise ValueError(
+                "InputTransformer.economic_vector is not set; "
+                "load_steering_vectors must run before scoring"
+            )
+        if not isinstance(hidden_representation, torch.Tensor):
+            raise ValueError(
+                f"{name} must be a torch.Tensor, "
+                f"got {type(hidden_representation).__name__}"
+            )
+        if hidden_representation.dim() != 1:
+            raise ValueError(
+                f"{name} must be a rank-1 tensor; "
+                f"got shape {tuple(hidden_representation.shape)}"
+            )
+        if hidden_representation.numel() == 0:
+            raise ValueError(f"{name} is empty (length 0)")
+        expected_dim = int(self.economic_vector.shape[0])
+        if hidden_representation.shape[0] != expected_dim:
+            raise ValueError(
+                f"{name} length {hidden_representation.shape[0]} does not match "
+                f"economic_vector length {expected_dim}"
+            )
+        tensor = hidden_representation.detach().to(dtype=torch.float32)
+        if not torch.isfinite(tensor).all().item():
+            raise ValueError(f"{name} contains NaN or inf entries")
+        return tensor
+
+    def maybe_center_representation(
+        self,
+        hidden_representation: Any,
+    ) -> torch.Tensor:
         """
         Optionally subtract a neutral reference representation before projection.
 
         Logic:
-        - use centering only if a neutral reference has been explicitly configured
-        - keep both centered and uncentered behavior easy to inspect
-        """
-        raise NotImplementedError
+        - validate hidden_representation as a 1D float numeric tensor whose
+          length matches self.economic_vector
+        - use_centering=False: return the validated tensor unchanged (detached,
+          float32). encode_prompt already produces a unit-norm vector, so this
+          path is a no-op for the prompt flow; the Editor passes a mixed
+          hidden state through this method as well, where preserving its
+          scale is intentional.
+        - use_centering=True: subtract self.neutral_reference and L2-normalize
+          so projections operate at the same scale as encode_prompt's
+          unit-norm output.
 
-    def compute_axis_scores(self, hidden_representation: Any) -> dict[str, float]:
+        Returns:
+        - detached float32 torch.Tensor on the same device as the input
+
+        Raises:
+        - ValueError naming the violated condition; centering with a missing
+          neutral_reference, shape mismatch, non-finite entries, and
+          non-positive post-centering norm all raise loudly.
+        """
+        hidden = self._validate_hidden_representation(
+            hidden_representation, "hidden_representation"
+        )
+
+        if not self.steering_config.use_centering:
+            return hidden
+
+        if self.neutral_reference is None:
+            raise ValueError(
+                "SteeringVectorConfig.use_centering=True requires a loaded "
+                "neutral_reference; got None"
+            )
+
+        neutral = self.neutral_reference.to(
+            device=hidden.device, dtype=torch.float32
+        )
+        if neutral.dim() != 1 or neutral.shape[0] != hidden.shape[0]:
+            raise ValueError(
+                f"neutral_reference shape {tuple(neutral.shape)} does not "
+                f"match hidden_representation shape {tuple(hidden.shape)}"
+            )
+
+        centered = hidden - neutral
+
+        if not torch.isfinite(centered).all().item():
+            raise ValueError(
+                "centered hidden representation contains NaN or inf entries"
+            )
+        if centered.dim() != 1 or centered.shape[0] != hidden.shape[0]:
+            raise ValueError(
+                f"centered hidden representation has unexpected shape "
+                f"{tuple(centered.shape)}"
+            )
+
+        norm = float(torch.linalg.vector_norm(centered).item())
+        if not math.isfinite(norm) or norm <= 0.0:
+            raise ValueError(
+                "centered hidden representation has non-positive or "
+                "non-finite L2 norm"
+            )
+        return centered / norm
+
+    def compute_axis_scores(
+        self,
+        hidden_representation: Any,
+    ) -> dict[str, float]:
         """
         Compute signed projections on economic and social axes.
 
-        Returns:
-        - dictionary with economic_score and social_score
-        """
-        raise NotImplementedError
+        Logic:
+        - validate hidden_representation as a 1D finite float tensor of the
+          expected hidden_dim
+        - dot with self.economic_vector and self.social_vector (temporarily
+          moved to the input's device; never permanently mutated)
 
-    def compute_quadrant_scores(self, hidden_representation: Any) -> dict[str, float]:
+        Returns:
+        - {"economic_score": float, "social_score": float}; no extra keys
+        """
+        hidden = self._validate_hidden_representation(
+            hidden_representation, "hidden_representation"
+        )
+
+        if self.economic_vector is None or self.social_vector is None:
+            raise ValueError(
+                "InputTransformer.economic_vector and social_vector must be "
+                "set; load_steering_vectors must run before compute_axis_scores"
+            )
+
+        economic_vector = self.economic_vector.to(
+            device=hidden.device, dtype=torch.float32
+        )
+        social_vector = self.social_vector.to(
+            device=hidden.device, dtype=torch.float32
+        )
+
+        economic_score = float(torch.dot(hidden, economic_vector).item())
+        social_score = float(torch.dot(hidden, social_vector).item())
+
+        for name, value in (
+            ("economic_score", economic_score),
+            ("social_score", social_score),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(f"{name} is not finite; got {value}")
+
+        return {
+            "economic_score": economic_score,
+            "social_score": social_score,
+        }
+
+    def compute_quadrant_scores(
+        self,
+        hidden_representation: Any,
+    ) -> dict[str, float]:
         """
         Derive canonical quadrant affinities from political-compass directions.
 
         Logic:
-        - compute scores for left_lib, left_auth, right_lib, right_auth
-        - use the canonical quadrant vectors built from signed axis combinations
+        - validate hidden_representation as a 1D finite float tensor of the
+          expected hidden_dim
+        - iterate CANONICAL_QUADRANT_ORDER (never dict.items()) and dot with
+          each canonical quadrant vector
+        - return a fresh dict whose key set equals CANONICAL_QUADRANT_ORDER
         """
-        raise NotImplementedError
+        hidden = self._validate_hidden_representation(
+            hidden_representation, "hidden_representation"
+        )
+
+        if not self.quadrant_vectors:
+            raise ValueError(
+                "InputTransformer.quadrant_vectors is empty; "
+                "load_steering_vectors must run before compute_quadrant_scores"
+            )
+
+        scores: dict[str, float] = {}
+        for quadrant in CANONICAL_QUADRANT_ORDER:
+            if quadrant not in self.quadrant_vectors:
+                raise ValueError(
+                    f"InputTransformer.quadrant_vectors is missing canonical "
+                    f"quadrant {quadrant!r}"
+                )
+            quadrant_vector = self.quadrant_vectors[quadrant].to(
+                device=hidden.device, dtype=torch.float32
+            )
+            score = float(torch.dot(hidden, quadrant_vector).item())
+            if not math.isfinite(score):
+                raise ValueError(
+                    f"quadrant_scores[{quadrant!r}] is not finite; got {score}"
+                )
+            scores[quadrant] = score
+        return scores
 
     def compute_bias_magnitude(
         self,
@@ -444,23 +1240,80 @@ class InputTransformer:
         """
         Compute distance from political center in compass space.
 
-        Notes:
-        - this is useful for routing fallback behavior and later diagnostics
+        Logic:
+        - reject bool (which is an int subclass) and any non-numeric input
+        - reject NaN and inf inputs
+        - return sqrt(economic_score**2 + social_score**2) as a finite,
+          non-negative Python float
         """
-        raise NotImplementedError
+        for name, value in (
+            ("economic_score", economic_score),
+            ("social_score", social_score),
+        ):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"{name} must be int or float (not bool); "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"{name} is NaN")
+            if math.isinf(value):
+                raise ValueError(f"{name} is infinite")
+
+        bias_magnitude = math.sqrt(
+            float(economic_score) ** 2 + float(social_score) ** 2
+        )
+
+        if not math.isfinite(bias_magnitude):
+            raise ValueError(
+                f"bias_magnitude is not finite; got {bias_magnitude}"
+            )
+        if bias_magnitude < 0:
+            raise ValueError(
+                f"bias_magnitude must be non-negative; got {bias_magnitude}"
+            )
+        return float(bias_magnitude)
 
     def transform(self, prompt_text: str) -> PromptState:
         """
         Full input-transformation pipeline.
 
         Flow:
-        - encode prompt
-        - optionally center representation
-        - compute axis scores
-        - compute quadrant scores
-        - package everything into PromptState
+        - encode prompt into the layer-20 unit-norm hidden representation
+        - optionally center it against the neutral reference
+        - compute economic / social axis projections
+        - compute canonical quadrant projections
+        - derive bias_magnitude from the axis scores
+        - package everything into a PromptState carrying minimal traceability
+          metadata (encoding_layer, pooling_method, vector_method,
+          use_final_aggregated_vectors, use_centering)
         """
-        raise NotImplementedError
+        hidden = self.encode_prompt(prompt_text)
+        centered = self.maybe_center_representation(hidden)
+        axis_scores = self.compute_axis_scores(centered)
+        quadrant_scores = self.compute_quadrant_scores(centered)
+        bias_magnitude = self.compute_bias_magnitude(
+            axis_scores["economic_score"],
+            axis_scores["social_score"],
+        )
+
+        metadata: dict[str, Any] = {
+            "encoding_layer": self.ENCODING_LAYER,
+            "pooling_method": self.steering_config.pooling_method,
+            "vector_method": self.steering_config.vector_method,
+            "use_final_aggregated_vectors": self.steering_config.use_final_aggregated_vectors,
+            "use_centering": self.steering_config.use_centering,
+        }
+
+        return PromptState(
+            prompt_text=prompt_text,
+            hidden_representation=centered,
+            economic_score=axis_scores["economic_score"],
+            social_score=axis_scores["social_score"],
+            quadrant_scores=quadrant_scores,
+            bias_magnitude=bias_magnitude,
+            metadata=metadata,
+        )
 
 
 # === CALIBRATED ROUTER TRAINING DATASET SCHEMA ===

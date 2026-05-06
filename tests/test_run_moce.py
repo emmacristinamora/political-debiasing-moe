@@ -17,10 +17,10 @@ import torch
 
 # === MODULE LOADING ===
 
-# src/07_run_moce.py begins with a digit, so it cannot be imported via normal
+# src/10_run_moce.py begins with a digit, so it cannot be imported via normal
 # "import" syntax. load it explicitly by absolute path with importlib.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_RUN_MOCE_PATH = _REPO_ROOT / "src" / "07_run_moce.py"
+_RUN_MOCE_PATH = _REPO_ROOT / "src" / "10_run_moce.py"
 
 _spec = importlib.util.spec_from_file_location("run_moce", _RUN_MOCE_PATH)
 run_moce = importlib.util.module_from_spec(_spec)
@@ -65,7 +65,7 @@ def _make_checkpoint(
 def _patched_argv(argv: list[str]):
     """Temporarily replace sys.argv so parse_args() reads from `argv`."""
     saved = sys.argv
-    sys.argv = ["07_run_moce.py", *argv]
+    sys.argv = ["10_run_moce.py", *argv]
     try:
         yield
     finally:

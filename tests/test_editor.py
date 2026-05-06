@@ -14,10 +14,10 @@ import torch
 
 # === MODULE LOADING ===
 
-# src/06_moce_components.py starts with a digit, so it cannot be imported via
+# src/09_moce_components.py starts with a digit, so it cannot be imported via
 # normal "import" syntax. load it explicitly by absolute path with importlib.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_MODULE_PATH = _REPO_ROOT / "src" / "06_moce_components.py"
+_MODULE_PATH = _REPO_ROOT / "src" / "09_moce_components.py"
 
 _spec = importlib.util.spec_from_file_location("moce_components", _MODULE_PATH)
 moce_components = importlib.util.module_from_spec(_spec)

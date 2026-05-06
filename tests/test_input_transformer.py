@@ -612,6 +612,56 @@ class CenteringTests(_BaseTempDirTest):
             InputTransformer(_FakeModel(hidden_dim=4), _FakeTokenizer(), config)
 
 
+class ConfigDefaultsTests(_BaseTempDirTest):
+
+    def test_encoding_layer_constant(self) -> None:
+        self.assertEqual(InputTransformer.ENCODING_LAYER, 20)
+
+    def test_default_max_length_constant(self) -> None:
+        self.assertEqual(InputTransformer.DEFAULT_MAX_LENGTH, 512)
+
+    def test_pooling_method_other_than_mean_rejected(self) -> None:
+        econ_path = self.tmp / "economic_vectors.pt"
+        soc_path = self.tmp / "social_vectors.pt"
+        _write_vector_artifact(econ_path, final_vector=_basis_econ())
+        _write_vector_artifact(soc_path, final_vector=_basis_social())
+        config = SteeringVectorConfig(
+            economic_vector_path=econ_path,
+            social_vector_path=soc_path,
+            pooling_method="last_token",
+        )
+        with self.assertRaisesRegex(ValueError, "pooling_method"):
+            InputTransformer(_FakeModel(hidden_dim=4), _FakeTokenizer(), config)
+
+    def test_selected_layers_missing_encoding_layer_rejected(self) -> None:
+        # use a selected_layers list that does not include ENCODING_LAYER (20);
+        # __init__ must reject it before any artifact is loaded
+        econ_path = self.tmp / "economic_vectors.pt"
+        soc_path = self.tmp / "social_vectors.pt"
+        _write_vector_artifact(
+            econ_path, final_vector=_basis_econ(), layers=(8, 12, 16, 24),
+        )
+        _write_vector_artifact(
+            soc_path, final_vector=_basis_social(), layers=(8, 12, 16, 24),
+        )
+        config = SteeringVectorConfig(
+            economic_vector_path=econ_path,
+            social_vector_path=soc_path,
+            selected_layers=[8, 12, 16, 24],
+        )
+        with self.assertRaisesRegex(ValueError, "selected_layers"):
+            InputTransformer(_FakeModel(hidden_dim=4), _FakeTokenizer(), config)
+
+    def test_metadata_uses_encoding_layer_constant(self) -> None:
+        inst = _build_transformer(
+            self.tmp, layer20_value=torch.tensor([1.0, 0.0, 0.0, 0.0]),
+        )
+        state = inst.transform("hi")
+        self.assertEqual(
+            state.metadata["encoding_layer"], InputTransformer.ENCODING_LAYER,
+        )
+
+
 # === MAIN ===
 
 if __name__ == "__main__":

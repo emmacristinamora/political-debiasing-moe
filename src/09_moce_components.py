@@ -383,6 +383,17 @@ class InputTransformer:
         "logistic_regression",
     )
 
+    # encode_prompt is locked to one transformer layer so prompt-side scoring
+    # operates in the same activation space as stage 05 document scoring; the
+    # constant lives here (rather than as a SteeringVectorConfig field) because
+    # making it configurable in v1 would silently desync steering-vector
+    # geometry across the pipeline.
+    ENCODING_LAYER: int = 20
+
+    # default tokenizer truncation length used by encode_prompt; matches the
+    # ceiling chosen for prompt-side encoding in step 3.
+    DEFAULT_MAX_LENGTH: int = 512
+
     def __init__(
         self,
         model: Any,
@@ -394,6 +405,23 @@ class InputTransformer:
         self.model = model
         self.tokenizer = tokenizer
         self.steering_config = steering_config
+
+        # fail-fast on configuration choices that contradict encode_prompt's
+        # implementation. encode_prompt only implements mean pooling, and the
+        # ENCODING_LAYER must appear in selected_layers so the per-layer
+        # steering-vector artifact has been built for it (per-layer mode) and
+        # so any layer-aware downstream tooling stays in agreement.
+        if self.steering_config.pooling_method != "mean":
+            raise ValueError(
+                "InputTransformer only supports pooling_method='mean' for v1; "
+                f"got {self.steering_config.pooling_method!r}"
+            )
+        if self.ENCODING_LAYER not in self.steering_config.selected_layers:
+            raise ValueError(
+                f"SteeringVectorConfig.selected_layers must include layer "
+                f"{self.ENCODING_LAYER} for InputTransformer encoding; "
+                f"got {list(self.steering_config.selected_layers)}"
+            )
 
         # encode_prompt runs the base model under no_grad; switch it to eval
         # mode if it supports it so dropout / batch-norm style layers behave
@@ -829,14 +857,17 @@ class InputTransformer:
         if not callable(self.tokenizer):
             raise ValueError("InputTransformer.tokenizer must be callable")
 
-        # InputTransformer encoding is locked to layer 20 to keep inference
-        # geometry aligned with stage 05 document scoring; selected_layers[-1]
-        # would pick layer 24 by default, which is the wrong layer.
-        encoding_layer = 20
+        # InputTransformer encoding is locked to a single transformer layer
+        # to keep inference geometry aligned with stage 05 document scoring;
+        # selected_layers[-1] would pick the wrong layer by default. The
+        # config-side check below is also enforced in __init__; it stays here
+        # as a defensive guard against post-construction mutation of
+        # steering_config.
+        encoding_layer = self.ENCODING_LAYER
         if encoding_layer not in self.steering_config.selected_layers:
             raise ValueError(
-                "SteeringVectorConfig.selected_layers must include layer 20 "
-                "for InputTransformer encoding"
+                f"SteeringVectorConfig.selected_layers must include layer "
+                f"{encoding_layer} for InputTransformer encoding"
             )
 
         if self.economic_vector is None:
@@ -850,7 +881,7 @@ class InputTransformer:
             prompt_text,
             return_tensors="pt",
             truncation=True,
-            max_length=512,
+            max_length=self.DEFAULT_MAX_LENGTH,
         )
 
         for required_key in ("input_ids", "attention_mask"):
@@ -1267,7 +1298,7 @@ class InputTransformer:
         )
 
         metadata: dict[str, Any] = {
-            "encoding_layer": 20,
+            "encoding_layer": self.ENCODING_LAYER,
             "pooling_method": self.steering_config.pooling_method,
             "vector_method": self.steering_config.vector_method,
             "use_final_aggregated_vectors": self.steering_config.use_final_aggregated_vectors,

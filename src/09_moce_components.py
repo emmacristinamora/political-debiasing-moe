@@ -1,4 +1,4 @@
-# src/06_moce_architecture.py
+# src/09_moce_components.py
 
 
 # === IMPORTS ===
@@ -376,25 +376,425 @@ class InputTransformer:
     - this component is not generic preprocessing; it is the prompt-state estimator
     """
 
+    # supported vector_method values; both live in artifact["final_vectors"]
+    # and in artifact["per_layer"][L][method]["vector"] (see 04_build_steering_vectors.py)
+    _SUPPORTED_VECTOR_METHODS: tuple[str, ...] = (
+        "mean_difference",
+        "logistic_regression",
+    )
+
     def __init__(
         self,
         model: Any,
         tokenizer: Any,
         steering_config: SteeringVectorConfig,
     ) -> None:
-        # store base model, tokenizer, and steering-vector settings
-        # load economic/social vectors and any optional centering reference
-        raise NotImplementedError
+        # model and tokenizer are stored for later steps (encode_prompt) but
+        # are not consulted here; vector loading is purely from disk artifacts
+        self.model = model
+        self.tokenizer = tokenizer
+        self.steering_config = steering_config
+
+        # populated by load_steering_vectors(); declared up-front so the
+        # attribute set is stable even if load_steering_vectors raises
+        self.economic_vector: torch.Tensor | None = None
+        self.social_vector: torch.Tensor | None = None
+        self.quadrant_vectors: dict[str, torch.Tensor] = {}
+        self.neutral_reference: torch.Tensor | None = None
+
+        # fail-early: invalid artifacts surface here, not at the first
+        # transform() call from the engine
+        self.load_steering_vectors()
 
     def load_steering_vectors(self) -> None:
         """
-        Load economic and social steering-vector artifacts from disk.
+        Load economic and social steering-vector artifacts from disk and build
+        the canonical quadrant vectors.
 
         Logic:
-        - support both final aggregated vectors and per-layer vectors
-        - validate that vector metadata matches inference assumptions
+        - validate vector_method against the supported set
+        - load both axis artifacts via torch.load(map_location="cpu")
+        - select either the final aggregated vector or a per-layer aggregate
+          across SteeringVectorConfig.selected_layers (each per-layer vector
+          is normalized before averaging; the average is then re-normalized)
+        - validate selected vectors (1D, finite, non-empty, matching shapes)
+          and store as float32 CPU tensors with unit L2 norm
+        - construct the four canonical quadrant vectors via the documented
+          sign convention:
+            left_lib   = normalize(-econ - social)
+            left_auth  = normalize(-econ + social)
+            right_lib  = normalize(+econ - social)
+            right_auth = normalize(+econ + social)
+        - if steering_config.use_centering, additionally load and validate the
+          neutral reference vector (same shape as the axis vectors)
+
+        Raises:
+        - FileNotFoundError if any required artifact path does not exist
+        - ValueError on any schema, shape, dtype, or finiteness violation
         """
-        raise NotImplementedError
+        cfg = self.steering_config
+
+        if cfg.vector_method not in self._SUPPORTED_VECTOR_METHODS:
+            raise ValueError(
+                "SteeringVectorConfig.vector_method must be one of "
+                f"{list(self._SUPPORTED_VECTOR_METHODS)}; got {cfg.vector_method!r}"
+            )
+
+        economic_artifact = self._load_vector_artifact(
+            cfg.economic_vector_path, "economic"
+        )
+        social_artifact = self._load_vector_artifact(
+            cfg.social_vector_path, "social"
+        )
+
+        # in per-layer mode, post-aggregation diagnostics need to point users at
+        # the averaging step (the only place a non-zero set of inputs can yield
+        # a zero output via cancellation), not at the raw axis vector
+        if cfg.use_final_aggregated_vectors:
+            economic_raw = self._select_final_vector(
+                economic_artifact, "economic", cfg.vector_method, cfg.economic_vector_path
+            )
+            social_raw = self._select_final_vector(
+                social_artifact, "social", cfg.vector_method, cfg.social_vector_path
+            )
+            economic_label = "economic_vector"
+            social_label = "social_vector"
+        else:
+            economic_raw = self._select_per_layer_aggregated(
+                economic_artifact, "economic", cfg.vector_method,
+                cfg.selected_layers, cfg.economic_vector_path,
+            )
+            social_raw = self._select_per_layer_aggregated(
+                social_artifact, "social", cfg.vector_method,
+                cfg.selected_layers, cfg.social_vector_path,
+            )
+            economic_label = "economic_vector (per-layer mean)"
+            social_label = "social_vector (per-layer mean)"
+
+        economic_validated = self._validate_vector(economic_raw, economic_label)
+        social_validated = self._validate_vector(social_raw, social_label)
+
+        if economic_validated.shape != social_validated.shape:
+            raise ValueError(
+                f"{economic_label} shape {tuple(economic_validated.shape)} does not "
+                f"match {social_label} shape {tuple(social_validated.shape)}"
+            )
+
+        self.economic_vector = self._normalize_vector(economic_validated, economic_label)
+        self.social_vector = self._normalize_vector(social_validated, social_label)
+
+        self.quadrant_vectors = self._build_quadrant_vectors(
+            self.economic_vector, self.social_vector
+        )
+
+        self.neutral_reference = self._maybe_load_neutral_reference()
+
+    def _load_vector_artifact(self, path: Path, axis_name: str) -> dict[str, Any]:
+        """
+        Load a steering-vector .pt artifact and confirm it is a dict.
+
+        Logic:
+        - require an existing file path (FileNotFoundError otherwise)
+        - torch.load with map_location="cpu" and weights_only=False (the
+          artifact contains nested Python dicts in addition to tensors)
+        - the top-level payload must be a dict
+        """
+        if not isinstance(path, Path):
+            raise ValueError(
+                f"{axis_name}_vector_path must be a pathlib.Path, "
+                f"got {type(path).__name__}"
+            )
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{axis_name} steering vector artifact not found: {path}"
+            )
+        artifact = torch.load(path, map_location="cpu", weights_only=False)
+        if not isinstance(artifact, dict):
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} must be a dict, "
+                f"got {type(artifact).__name__}"
+            )
+        return artifact
+
+    def _select_final_vector(
+        self,
+        artifact: dict[str, Any],
+        axis_name: str,
+        vector_method: str,
+        path: Path,
+    ) -> Any:
+        """
+        Pick the final aggregated vector for the requested method.
+
+        Schema (from 04_build_steering_vectors.py):
+            artifact["final_vectors"][vector_method] -> torch.Tensor
+        """
+        if "final_vectors" not in artifact:
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} is missing "
+                f"required key 'final_vectors'"
+            )
+        final_vectors = artifact["final_vectors"]
+        if not isinstance(final_vectors, dict):
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} field "
+                f"'final_vectors' must be a dict, got {type(final_vectors).__name__}"
+            )
+        if vector_method not in final_vectors:
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} has no "
+                f"final_vectors[{vector_method!r}]; available keys: "
+                f"{sorted(final_vectors.keys())}"
+            )
+        return final_vectors[vector_method]
+
+    def _select_per_layer_aggregated(
+        self,
+        artifact: dict[str, Any],
+        axis_name: str,
+        vector_method: str,
+        selected_layers: list[int],
+        path: Path,
+    ) -> torch.Tensor:
+        """
+        Aggregate per-layer vectors at SteeringVectorConfig.selected_layers.
+
+        Logic:
+        - validate selected_layers is a non-empty list of ints
+        - for each selected layer, read artifact["per_layer"][L][method]["vector"]
+          and normalize it (so layers contribute equally regardless of raw scale)
+        - average the normalized layer vectors and return the unnormalized
+          mean; the caller normalizes once more downstream
+        """
+        if not isinstance(selected_layers, (list, tuple)) or len(selected_layers) == 0:
+            raise ValueError(
+                "SteeringVectorConfig.selected_layers must be a non-empty list "
+                f"of ints when use_final_aggregated_vectors=False; got {selected_layers!r}"
+            )
+        if "per_layer" not in artifact:
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} is missing "
+                f"required key 'per_layer'"
+            )
+        per_layer = artifact["per_layer"]
+        if not isinstance(per_layer, dict):
+            raise ValueError(
+                f"{axis_name} steering vector artifact at {path} field "
+                f"'per_layer' must be a dict, got {type(per_layer).__name__}"
+            )
+
+        normalized_layer_vectors: list[torch.Tensor] = []
+        reference_shape: tuple[int, ...] | None = None
+        seen_layers: set[int] = set()
+        for layer in selected_layers:
+            if not isinstance(layer, int) or isinstance(layer, bool):
+                raise ValueError(
+                    f"SteeringVectorConfig.selected_layers entries must be int; "
+                    f"got {type(layer).__name__}"
+                )
+            if layer in seen_layers:
+                raise ValueError(
+                    f"SteeringVectorConfig.selected_layers contains duplicate "
+                    f"layer {layer}; duplicates would silently reweight the "
+                    f"per-layer aggregate. Got {list(selected_layers)!r}"
+                )
+            seen_layers.add(layer)
+            if layer not in per_layer:
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} per_layer "
+                    f"is missing layer {layer}; available layers: "
+                    f"{sorted(per_layer.keys())}"
+                )
+            layer_payload = per_layer[layer]
+            if not isinstance(layer_payload, dict):
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} "
+                    f"per_layer[{layer}] must be a dict, got {type(layer_payload).__name__}"
+                )
+            if vector_method not in layer_payload:
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} "
+                    f"per_layer[{layer}] is missing method {vector_method!r}; "
+                    f"available: {sorted(layer_payload.keys())}"
+                )
+            method_payload = layer_payload[vector_method]
+            if not isinstance(method_payload, dict) or "vector" not in method_payload:
+                raise ValueError(
+                    f"{axis_name} steering vector artifact at {path} "
+                    f"per_layer[{layer}][{vector_method!r}] must be a dict "
+                    f"containing key 'vector'"
+                )
+            label = f"{axis_name} per_layer[{layer}][{vector_method!r}].vector"
+            validated = self._validate_vector(method_payload["vector"], label)
+            if reference_shape is None:
+                reference_shape = tuple(validated.shape)
+            elif tuple(validated.shape) != reference_shape:
+                raise ValueError(
+                    f"{axis_name} per-layer vectors have inconsistent shape: "
+                    f"layer {layer} has shape {tuple(validated.shape)} "
+                    f"vs reference {reference_shape}"
+                )
+            normalized_layer_vectors.append(self._normalize_vector(validated, label))
+
+        return torch.stack(normalized_layer_vectors).mean(dim=0)
+
+    def _validate_vector(self, value: Any, name: str) -> torch.Tensor:
+        """
+        Coerce value to a 1D float32 CPU tensor and validate it.
+
+        Logic:
+        - accept torch.Tensor, list, tuple, or numpy ndarray (detected by
+          duck-typing on type module name to avoid a hard numpy import)
+        - require non-empty 1D shape
+        - require finite entries (no NaN, no inf) after coercion
+        - return a contiguous float32 CPU tensor
+
+        Note: this helper does NOT enforce a positive norm; callers that
+        normalize delegate that check to _normalize_vector.
+        """
+        if value is None:
+            raise ValueError(f"{name} is None")
+
+        if isinstance(value, torch.Tensor):
+            tensor = value
+        elif isinstance(value, (list, tuple)):
+            try:
+                tensor = torch.tensor(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"{name} could not be converted to a tensor: {exc}"
+                ) from exc
+        elif (
+            type(value).__module__.split(".")[0] == "numpy"
+            and type(value).__name__ == "ndarray"
+        ):
+            try:
+                tensor = torch.from_numpy(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"{name} could not be converted from numpy ndarray: {exc}"
+                ) from exc
+        else:
+            raise ValueError(
+                f"{name} must be a torch.Tensor, list, tuple, or numpy ndarray; "
+                f"got {type(value).__name__}"
+            )
+
+        if tensor.dim() != 1:
+            raise ValueError(
+                f"{name} must be a 1D vector; got shape {tuple(tensor.shape)}"
+            )
+        if tensor.numel() == 0:
+            raise ValueError(f"{name} is empty (length 0)")
+
+        tensor = tensor.detach().to(dtype=torch.float32, device="cpu").contiguous()
+
+        if not torch.isfinite(tensor).all().item():
+            raise ValueError(f"{name} contains NaN or inf entries")
+        return tensor
+
+    def _normalize_vector(self, vector: torch.Tensor, name: str) -> torch.Tensor:
+        """
+        Return vector / ||vector||_2; raise if the norm is not strictly positive.
+        """
+        norm = float(torch.linalg.vector_norm(vector).item())
+        if not math.isfinite(norm) or norm <= 0.0:
+            raise ValueError(
+                f"{name} has non-positive or non-finite L2 norm ({norm}); "
+                "cannot normalize"
+            )
+        return (vector / norm).to(dtype=torch.float32)
+
+    def _build_quadrant_vectors(
+        self,
+        economic_vector: torch.Tensor,
+        social_vector: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
+        """
+        Build the four normalized canonical quadrant vectors.
+
+        Sign convention:
+            +economic = right, -economic = left
+            +social   = authoritarian, -social = libertarian
+        Combinations:
+            left_lib   = normalize(-econ - social)
+            left_auth  = normalize(-econ + social)
+            right_lib  = normalize(+econ - social)
+            right_auth = normalize(+econ + social)
+        """
+        raw_combinations: dict[str, torch.Tensor] = {
+            "left_lib": -economic_vector - social_vector,
+            "left_auth": -economic_vector + social_vector,
+            "right_lib": economic_vector - social_vector,
+            "right_auth": economic_vector + social_vector,
+        }
+        # iterate canonical order so the resulting dict has a deterministic
+        # construction order; consumers must still address it by key
+        quadrants: dict[str, torch.Tensor] = {}
+        for key in CANONICAL_QUADRANT_ORDER:
+            raw_vector = raw_combinations[key]
+            label = f"quadrant_vectors[{key!r}]"
+            if not torch.isfinite(raw_vector).all().item():
+                raise ValueError(f"{label} contains NaN or inf entries")
+            quadrants[key] = self._normalize_vector(raw_vector, label)
+        return quadrants
+
+    def _maybe_load_neutral_reference(self) -> torch.Tensor | None:
+        """
+        Load and validate the neutral reference if centering is enabled.
+
+        Logic:
+        - returns None when use_centering=False
+        - requires neutral_reference_path when use_centering=True
+        - accepts either a raw tensor/list/tuple/ndarray or a dict with a
+          'vector' key (mirrors the per-axis artifact convention)
+        - the resulting vector must match the shape of the loaded axis
+          vectors so projection and centering operate in the same space
+        """
+        cfg = self.steering_config
+        if not cfg.use_centering:
+            return None
+        if cfg.neutral_reference_path is None:
+            raise ValueError(
+                "SteeringVectorConfig.use_centering=True requires "
+                "neutral_reference_path; got None"
+            )
+        path = cfg.neutral_reference_path
+        if not isinstance(path, Path):
+            raise ValueError(
+                f"SteeringVectorConfig.neutral_reference_path must be a "
+                f"pathlib.Path, got {type(path).__name__}"
+            )
+        if not path.exists():
+            raise FileNotFoundError(
+                f"neutral reference artifact not found: {path}"
+            )
+
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        if isinstance(payload, dict):
+            if "vector" not in payload:
+                raise ValueError(
+                    f"neutral reference dict at {path} is missing required "
+                    f"key 'vector'; available: {sorted(payload.keys())}"
+                )
+            candidate = payload["vector"]
+        else:
+            candidate = payload
+
+        validated = self._validate_vector(candidate, "neutral_reference")
+        if self.economic_vector is None:
+            # defensive: load_steering_vectors sets this before calling us;
+            # if we ever reordered, surface it loudly rather than skip the check
+            raise ValueError(
+                "neutral reference loading reached before economic_vector was "
+                "set; this indicates an internal ordering bug in load_steering_vectors"
+            )
+        if validated.shape != self.economic_vector.shape:
+            raise ValueError(
+                f"neutral_reference shape {tuple(validated.shape)} does not "
+                f"match economic_vector shape {tuple(self.economic_vector.shape)}"
+            )
+        return validated
 
     def encode_prompt(self, prompt_text: str) -> Any:
         """

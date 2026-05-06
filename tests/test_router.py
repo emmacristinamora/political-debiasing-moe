@@ -61,7 +61,7 @@ def _calibrated_router(hidden_dim: int = 4) -> Router:
         beta=1.0,
         temperature=1.0,
         use_calibrated_router=True,
-        router_hidden_dim=hidden_dim,
+        calibration_input_dim=hidden_dim,
     ))
 
 
@@ -717,7 +717,7 @@ class CalibrationCheckpointTests(unittest.TestCase):
         state_dict = self._state_dict_filled(self.hidden_dim, 0.5, 0.25)
         path = self._save_checkpoint({
             "state_dict": state_dict,
-            "router_hidden_dim": self.hidden_dim,
+            "calibration_input_dim": self.hidden_dim,
             "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
             "beta": 1.5,
             "temperature": 0.75,
@@ -736,16 +736,75 @@ class CalibrationCheckpointTests(unittest.TestCase):
         meta = router.calibration_checkpoint_metadata
         self.assertIsNotNone(meta)
         self.assertEqual(meta["checkpoint_path"], str(path))
-        self.assertEqual(meta["router_hidden_dim"], self.hidden_dim)
+        self.assertEqual(meta["calibration_input_dim"], self.hidden_dim)
         self.assertEqual(meta["canonical_quadrant_order"], list(CANONICAL_QUADRANT_ORDER))
         self.assertEqual(meta["beta"], 1.5)
         self.assertEqual(meta["temperature"], 0.75)
+        # a non-legacy load should not introduce a legacy_router_hidden_dim entry
+        self.assertNotIn("legacy_router_hidden_dim", meta)
+
+    def test_legacy_router_hidden_dim_load(self) -> None:
+        # legacy checkpoints use the old 'router_hidden_dim' key only
+        router = _calibrated_router(hidden_dim=self.hidden_dim)
+        state_dict = self._state_dict_filled(self.hidden_dim, 0.5, 0.25)
+        path = self._save_checkpoint({
+            "state_dict": state_dict,
+            "router_hidden_dim": self.hidden_dim,
+            "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
+        })
+
+        router.load_calibration_checkpoint(path)
+
+        meta = router.calibration_checkpoint_metadata
+        self.assertIsNotNone(meta)
+        self.assertEqual(meta["calibration_input_dim"], self.hidden_dim)
+        # legacy provenance is preserved when the new key was absent
+        self.assertEqual(meta["legacy_router_hidden_dim"], self.hidden_dim)
+
+    def test_both_keys_equal_load(self) -> None:
+        # checkpoints written by the new trainer carry both keys with the
+        # same value for backward compatibility; this must load cleanly
+        router = _calibrated_router(hidden_dim=self.hidden_dim)
+        state_dict = self._state_dict_filled(self.hidden_dim, 0.5, 0.25)
+        path = self._save_checkpoint({
+            "state_dict": state_dict,
+            "calibration_input_dim": self.hidden_dim,
+            "router_hidden_dim": self.hidden_dim,
+            "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
+        })
+
+        router.load_calibration_checkpoint(path)
+
+        meta = router.calibration_checkpoint_metadata
+        self.assertEqual(meta["calibration_input_dim"], self.hidden_dim)
+
+    def test_both_keys_unequal_raises(self) -> None:
+        router = _calibrated_router(hidden_dim=self.hidden_dim)
+        path = self._save_checkpoint({
+            "state_dict": self._state_dict_filled(self.hidden_dim, 0.0, 0.0),
+            "calibration_input_dim": self.hidden_dim,
+            "router_hidden_dim": self.hidden_dim + 1,
+            "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
+        })
+        with self.assertRaisesRegex(ValueError, "must agree"):
+            router.load_calibration_checkpoint(path)
+        self.assertIsNone(router.calibration_checkpoint_metadata)
+
+    def test_neither_dim_key_raises(self) -> None:
+        router = _calibrated_router(hidden_dim=self.hidden_dim)
+        path = self._save_checkpoint({
+            "state_dict": self._state_dict_filled(self.hidden_dim, 0.0, 0.0),
+            "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
+        })
+        with self.assertRaisesRegex(ValueError, "calibration_input_dim"):
+            router.load_calibration_checkpoint(path)
+        self.assertIsNone(router.calibration_checkpoint_metadata)
 
     def test_heuristic_router_rejects_load(self) -> None:
         router = Router(RouterConfig())  # use_calibrated_router=False
         path = self._save_checkpoint({
             "state_dict": self._state_dict_filled(self.hidden_dim, 0.0, 0.0),
-            "router_hidden_dim": self.hidden_dim,
+            "calibration_input_dim": self.hidden_dim,
             "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
         })
         with self.assertRaisesRegex(ValueError, "calibration"):
@@ -756,12 +815,25 @@ class CalibrationCheckpointTests(unittest.TestCase):
         bad_dim = self.hidden_dim + 1
         path = self._save_checkpoint({
             "state_dict": self._state_dict_filled(bad_dim, 0.0, 0.0),
+            "calibration_input_dim": bad_dim,
+            "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
+        })
+        with self.assertRaisesRegex(ValueError, "calibration_input_dim"):
+            router.load_calibration_checkpoint(path)
+        # failed load must not populate metadata
+        self.assertIsNone(router.calibration_checkpoint_metadata)
+
+    def test_legacy_hidden_dim_mismatch_raises(self) -> None:
+        # legacy checkpoint with mismatched router_hidden_dim must still fail
+        router = _calibrated_router(hidden_dim=self.hidden_dim)
+        bad_dim = self.hidden_dim + 1
+        path = self._save_checkpoint({
+            "state_dict": self._state_dict_filled(bad_dim, 0.0, 0.0),
             "router_hidden_dim": bad_dim,
             "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
         })
-        with self.assertRaisesRegex(ValueError, "router_hidden_dim"):
+        with self.assertRaisesRegex(ValueError, "calibration_input_dim"):
             router.load_calibration_checkpoint(path)
-        # failed load must not populate metadata
         self.assertIsNone(router.calibration_checkpoint_metadata)
 
     def test_canonical_order_mismatch_raises(self) -> None:
@@ -769,7 +841,7 @@ class CalibrationCheckpointTests(unittest.TestCase):
         scrambled = ["right_auth", "right_lib", "left_auth", "left_lib"]
         path = self._save_checkpoint({
             "state_dict": self._state_dict_filled(self.hidden_dim, 0.0, 0.0),
-            "router_hidden_dim": self.hidden_dim,
+            "calibration_input_dim": self.hidden_dim,
             "canonical_quadrant_order": scrambled,
         })
         with self.assertRaisesRegex(ValueError, "canonical_quadrant_order"):
@@ -780,7 +852,7 @@ class CalibrationCheckpointTests(unittest.TestCase):
         router = _calibrated_router(hidden_dim=self.hidden_dim)
         # omit state_dict
         path = self._save_checkpoint({
-            "router_hidden_dim": self.hidden_dim,
+            "calibration_input_dim": self.hidden_dim,
             "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
         })
         with self.assertRaisesRegex(ValueError, "state_dict"):

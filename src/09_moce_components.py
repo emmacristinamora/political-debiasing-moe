@@ -78,8 +78,10 @@ class RouterConfig:
     - use_calibrated_router selects between the two implemented modes
     - beta, temperature, fallback_to_uniform_if_centered, center_threshold
       drive the heuristic prior in both modes
-    - router_hidden_dim is the calibration module's input dimension and
-      is consumed at construction time when use_calibrated_router=True
+    - calibration_input_dim is the expected length of
+      PromptState.hidden_representation; it is used only by the calibrated
+      router correction head and must match the activation-space hidden
+      dimension produced by InputTransformer and used during router training
     - kl_weight, entropy_weight are not applied at inference time; Router
       reports raw KL and entropy via compute_router_losses for diagnostics,
       and any weighting is done by the external training script
@@ -90,7 +92,7 @@ class RouterConfig:
     temperature: float = 1.0                        # softmax temperature on the prior logits
     kl_weight: float = 0.1                          # diagnostics-only at inference; consumed by trainer
     entropy_weight: float = 0.01                    # diagnostics-only at inference; consumed by trainer
-    router_hidden_dim: int = 128                    # calibration module input dim (calibrated mode only)
+    calibration_input_dim: int = 128                # input dim of the calibrated router correction head (calibrated mode only)
     fallback_to_uniform_if_centered: bool = True    # near-center prompts get uniform prior
     center_threshold: float = 0.05                  # threshold on bias_magnitude for fallback
 
@@ -1396,7 +1398,7 @@ class InputTransformer:
 #   - hidden_representation_ref resolves to an existing 1D vector in the
 #     associated tensor artifact (no missing rows, no broken pointers)
 #   - the resolved hidden vector's length equals the calibration module's
-#     declared input dimension (RouterConfig.router_hidden_dim used at
+#     declared input dimension (RouterConfig.calibration_input_dim used at
 #     inference time); a mismatch is a hard error, not a silent reshape,
 #     pad, or truncation -- mirrors the runtime contract enforced by
 #     Router._prepare_hidden_representation
@@ -1543,25 +1545,24 @@ class Router:
             self.calibration_checkpoint_metadata: dict[str, Any] | None = None
             return
 
-        # calibrated mode: router_hidden_dim is reinterpreted here as the
-        # input dimension expected by the calibration module (i.e. the
-        # dimensionality of PromptState.hidden_representation). a dedicated
-        # field will replace this overload in a later step.
-        router_hidden_dim = config.router_hidden_dim
-        if not isinstance(router_hidden_dim, int) or isinstance(router_hidden_dim, bool):
+        # calibrated mode: calibration_input_dim is the expected length of
+        # PromptState.hidden_representation and the input dimension of the
+        # correction head.
+        calibration_input_dim = config.calibration_input_dim
+        if not isinstance(calibration_input_dim, int) or isinstance(calibration_input_dim, bool):
             raise ValueError(
-                "RouterConfig.router_hidden_dim must be a positive int when "
-                f"use_calibrated_router=True; got {type(router_hidden_dim).__name__}"
+                "RouterConfig.calibration_input_dim must be a positive int when "
+                f"use_calibrated_router=True; got {type(calibration_input_dim).__name__}"
             )
-        if router_hidden_dim <= 0:
+        if calibration_input_dim <= 0:
             raise ValueError(
-                "RouterConfig.router_hidden_dim must be a positive int when "
-                f"use_calibrated_router=True; got {router_hidden_dim}"
+                "RouterConfig.calibration_input_dim must be a positive int when "
+                f"use_calibrated_router=True; got {calibration_input_dim}"
             )
 
-        self.calibration_input_dim: int | None = router_hidden_dim
+        self.calibration_input_dim: int | None = calibration_input_dim
         self.calibration_module: nn.Module | None = nn.Linear(
-            router_hidden_dim,
+            calibration_input_dim,
             len(CANONICAL_QUADRANT_ORDER),
         )
         # populated by load_calibration_checkpoint(); None until a checkpoint
@@ -1980,16 +1981,23 @@ class Router:
         self,
         checkpoint: Any,
         checkpoint_path: Path,
-    ) -> None:
+    ) -> int:
         """
         Fail-fast validation of a loaded calibration checkpoint.
 
         Logic:
         - the checkpoint payload must be a dict
-        - required keys: state_dict, router_hidden_dim, canonical_quadrant_order
-        - router_hidden_dim must equal self.calibration_input_dim
+        - required keys: state_dict, canonical_quadrant_order, and at least
+          one of {calibration_input_dim, router_hidden_dim} (the latter is
+          accepted as legacy metadata)
+        - if both calibration_input_dim and router_hidden_dim are present
+          they must be equal
+        - the resolved input dimension must equal self.calibration_input_dim
         - canonical_quadrant_order must equal CANONICAL_QUADRANT_ORDER exactly
           (as a tuple, in canonical order)
+
+        Returns:
+        - the resolved input dimension declared by the checkpoint
 
         Raises:
         - ValueError naming the missing key or the mismatched field
@@ -1999,18 +2007,40 @@ class Router:
                 f"calibration checkpoint at {checkpoint_path} must be a dict, "
                 f"got {type(checkpoint).__name__}"
             )
-        for key in ("state_dict", "router_hidden_dim", "canonical_quadrant_order"):
+        for key in ("state_dict", "canonical_quadrant_order"):
             if key not in checkpoint:
                 raise ValueError(
                     f"calibration checkpoint at {checkpoint_path} is missing "
                     f"required key {key!r}"
                 )
 
-        ckpt_dim = checkpoint["router_hidden_dim"]
+        has_new_key = "calibration_input_dim" in checkpoint
+        has_legacy_key = "router_hidden_dim" in checkpoint
+        if not has_new_key and not has_legacy_key:
+            raise ValueError(
+                f"calibration checkpoint at {checkpoint_path} is missing "
+                f"required key 'calibration_input_dim' "
+                f"(legacy 'router_hidden_dim' is also accepted)"
+            )
+        if has_new_key and has_legacy_key:
+            new_dim = checkpoint["calibration_input_dim"]
+            legacy_dim = checkpoint["router_hidden_dim"]
+            if new_dim != legacy_dim:
+                raise ValueError(
+                    f"calibration checkpoint at {checkpoint_path} declares "
+                    f"calibration_input_dim={new_dim} but legacy "
+                    f"router_hidden_dim={legacy_dim}; the two must agree"
+                )
+            ckpt_dim = new_dim
+        elif has_new_key:
+            ckpt_dim = checkpoint["calibration_input_dim"]
+        else:
+            ckpt_dim = checkpoint["router_hidden_dim"]
+
         if ckpt_dim != self.calibration_input_dim:
             raise ValueError(
                 f"calibration checkpoint at {checkpoint_path} declares "
-                f"router_hidden_dim={ckpt_dim}, but this router was constructed "
+                f"calibration_input_dim={ckpt_dim}, but this router was constructed "
                 f"with calibration_input_dim={self.calibration_input_dim}"
             )
 
@@ -2022,6 +2052,8 @@ class Router:
                 f"{list(CANONICAL_QUADRANT_ORDER)}"
             )
 
+        return ckpt_dim
+
     def load_calibration_checkpoint(self, checkpoint_path: Path) -> None:
         """
         Load a trained calibration head checkpoint into self.calibration_module.
@@ -2031,8 +2063,9 @@ class Router:
           (self.calibration_module is not None); raises ValueError otherwise.
           this method does not silently initialize a calibration module.
         - reads the checkpoint via torch.load on the given path
-        - validates state_dict, router_hidden_dim, and canonical_quadrant_order
-          via _validate_calibration_checkpoint_metadata
+        - validates state_dict, calibration_input_dim (or legacy
+          router_hidden_dim), and canonical_quadrant_order via
+          _validate_calibration_checkpoint_metadata
         - calls calibration_module.load_state_dict(checkpoint["state_dict"])
         - records minimal traceability in self.calibration_checkpoint_metadata
 
@@ -2060,14 +2093,18 @@ class Router:
             map_location="cpu",
             weights_only=False,
         )
-        self._validate_calibration_checkpoint_metadata(checkpoint, checkpoint_path)
+        ckpt_dim = self._validate_calibration_checkpoint_metadata(checkpoint, checkpoint_path)
         self.calibration_module.load_state_dict(checkpoint["state_dict"])
 
         metadata: dict[str, Any] = {
             "checkpoint_path": str(checkpoint_path),
-            "router_hidden_dim": checkpoint["router_hidden_dim"],
+            "calibration_input_dim": ckpt_dim,
             "canonical_quadrant_order": list(checkpoint["canonical_quadrant_order"]),
         }
+        # preserve legacy metadata when only the legacy key was present so
+        # downstream consumers can still recognize a legacy checkpoint
+        if "calibration_input_dim" not in checkpoint and "router_hidden_dim" in checkpoint:
+            metadata["legacy_router_hidden_dim"] = checkpoint["router_hidden_dim"]
         if "beta" in checkpoint:
             metadata["beta"] = checkpoint["beta"]
         if "temperature" in checkpoint:

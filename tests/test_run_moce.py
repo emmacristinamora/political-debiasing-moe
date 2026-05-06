@@ -53,6 +53,8 @@ def _make_checkpoint(
         layer.bias.fill_(bias_value)
     payload: dict[str, Any] = {
         "state_dict": layer.state_dict(),
+        "calibration_input_dim": hidden_dim,
+        # legacy alias kept so older runtimes can still load this checkpoint
         "router_hidden_dim": hidden_dim,
         "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
         "beta": 1.0,
@@ -93,6 +95,8 @@ class HeuristicModeTests(unittest.TestCase):
         args = _parse_args_silently([])
         self.assertFalse(args.calibrated)
         self.assertIsNone(args.router_checkpoint)
+        # the default destination should be the new name
+        self.assertTrue(hasattr(args, "calibration_input_dim"))
 
         router = run_moce.build_router(args, _components)
         self.assertIsNone(router.calibration_module)
@@ -121,9 +125,10 @@ class CalibratedModeTests(unittest.TestCase):
         args = _parse_args_silently([
             "--calibrated",
             "--router-checkpoint", str(self.ckpt_path),
-            "--router-hidden-dim", str(self.hidden_dim),
+            "--calibration-input-dim", str(self.hidden_dim),
         ])
         self.assertTrue(args.calibrated)
+        self.assertEqual(args.calibration_input_dim, self.hidden_dim)
 
         router = run_moce.build_router(args, _components)
         self.assertIsNotNone(router.calibration_module)
@@ -132,10 +137,23 @@ class CalibratedModeTests(unittest.TestCase):
         meta = router.calibration_checkpoint_metadata
         self.assertIsNotNone(meta)
         self.assertEqual(meta["checkpoint_path"], str(self.ckpt_path))
-        self.assertEqual(meta["router_hidden_dim"], self.hidden_dim)
+        self.assertEqual(meta["calibration_input_dim"], self.hidden_dim)
         self.assertEqual(
             meta["canonical_quadrant_order"], list(CANONICAL_QUADRANT_ORDER)
         )
+
+    def test_deprecated_router_hidden_dim_alias_still_works(self) -> None:
+        # the legacy CLI flag must still populate calibration_input_dim so
+        # existing scripts and docs do not break
+        _make_checkpoint(self.ckpt_path, hidden_dim=self.hidden_dim)
+        args = _parse_args_silently([
+            "--calibrated",
+            "--router-checkpoint", str(self.ckpt_path),
+            "--router-hidden-dim", str(self.hidden_dim),
+        ])
+        self.assertEqual(args.calibration_input_dim, self.hidden_dim)
+        router = run_moce.build_router(args, _components)
+        self.assertEqual(router.calibration_input_dim, self.hidden_dim)
 
 
 class CLIContractTests(unittest.TestCase):
@@ -176,15 +194,15 @@ class CheckpointFailureTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def test_hidden_dim_mismatch_raises_value_error(self) -> None:
+    def test_calibration_input_dim_mismatch_raises_value_error(self) -> None:
         # checkpoint built with hidden_dim=8 but CLI says 4
         _make_checkpoint(self.ckpt_path, hidden_dim=8)
         args = _parse_args_silently([
             "--calibrated",
             "--router-checkpoint", str(self.ckpt_path),
-            "--router-hidden-dim", str(self.hidden_dim),
+            "--calibration-input-dim", str(self.hidden_dim),
         ])
-        with self.assertRaisesRegex(ValueError, "router_hidden_dim"):
+        with self.assertRaisesRegex(ValueError, "calibration_input_dim"):
             run_moce.build_router(args, _components)
 
     def test_missing_checkpoint_file_raises(self) -> None:
@@ -192,7 +210,7 @@ class CheckpointFailureTests(unittest.TestCase):
         args = _parse_args_silently([
             "--calibrated",
             "--router-checkpoint", str(missing),
-            "--router-hidden-dim", str(self.hidden_dim),
+            "--calibration-input-dim", str(self.hidden_dim),
         ])
         with self.assertRaises(FileNotFoundError):
             run_moce.build_router(args, _components)

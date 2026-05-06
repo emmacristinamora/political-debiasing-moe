@@ -68,12 +68,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--calibration-input-dim",
         "--router-hidden-dim",
+        dest="calibration_input_dim",
         type=int,
         default=128,
         help=(
-            "Calibration head input dim. Used only in calibrated mode; must "
-            "match the checkpoint's router_hidden_dim or load fails loudly."
+            "Input dimension for the calibrated router correction head. Used "
+            "only in calibrated mode; must match the checkpoint's "
+            "calibration_input_dim (or legacy router_hidden_dim) or load fails "
+            "loudly. --router-hidden-dim is a deprecated alias."
         ),
     )
     args = parser.parse_args()
@@ -103,7 +107,7 @@ def build_router(args: argparse.Namespace, moce_components: Any) -> Any:
     """
     router_config = moce_components.RouterConfig(
         use_calibrated_router=args.calibrated,
-        router_hidden_dim=args.router_hidden_dim,
+        calibration_input_dim=args.calibration_input_dim,
     )
     router = moce_components.Router(router_config)
 
@@ -121,7 +125,7 @@ def report_router_status(args: argparse.Namespace, router: Any) -> None:
     print(f"router mode:        {mode}")
     if args.calibrated:
         meta = router.calibration_checkpoint_metadata or {}
-        print(f"router hidden dim:  {router.calibration_input_dim}")
+        print(f"calibration input dim: {router.calibration_input_dim}")
         print(f"checkpoint:         {meta.get('checkpoint_path')}")
         if "beta" in meta:
             print(f"checkpoint beta:    {meta['beta']}")

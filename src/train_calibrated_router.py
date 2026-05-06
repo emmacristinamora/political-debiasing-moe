@@ -80,10 +80,15 @@ def parse_args() -> argparse.Namespace:
     )
     # required hyper
     parser.add_argument(
+        "--calibration-input-dim",
         "--router-hidden-dim",
+        dest="calibration_input_dim",
         type=int,
         required=True,
-        help="Calibration head input dimension; must match runtime config.",
+        help=(
+            "Input dimension for the calibrated router correction head; "
+            "must match runtime config. --router-hidden-dim is a deprecated alias."
+        ),
     )
     # training config
     parser.add_argument("--beta", type=float, default=1.0)
@@ -325,7 +330,7 @@ def build_training_examples(
     if hidden_tensor.shape[1] != expected_hidden_dim:
         raise ValueError(
             f"Hidden tensor dim {hidden_tensor.shape[1]} does not match "
-            f"--router-hidden-dim {expected_hidden_dim}"
+            f"--calibration-input-dim {expected_hidden_dim}"
         )
 
     n = len(records)
@@ -349,7 +354,7 @@ def build_training_examples(
         if vector.shape[0] != expected_hidden_dim:
             raise ValueError(
                 f"[{example_id}] resolved hidden vector length {vector.shape[0]} "
-                f"does not match --router-hidden-dim {expected_hidden_dim}"
+                f"does not match --calibration-input-dim {expected_hidden_dim}"
             )
         if not torch.isfinite(vector).all().item():
             raise ValueError(
@@ -468,7 +473,10 @@ def save_checkpoint(
     """
     payload = {
         "state_dict": head.state_dict(),
-        "router_hidden_dim": args.router_hidden_dim,
+        "calibration_input_dim": args.calibration_input_dim,
+        # legacy alias kept so older runtimes that read router_hidden_dim
+        # can still load this checkpoint
+        "router_hidden_dim": args.calibration_input_dim,
         "canonical_quadrant_order": list(CANONICAL_QUADRANT_ORDER),
         "beta": args.beta,
         "temperature": args.temperature,
@@ -514,7 +522,7 @@ def main() -> None:
         records=records,
         hidden_tensor=hidden_tensor,
         expected_filename=args.hidden_path.name,
-        expected_hidden_dim=args.router_hidden_dim,
+        expected_hidden_dim=args.calibration_input_dim,
     )
     dataset_size = hidden_features.shape[0]
 
@@ -528,7 +536,7 @@ def main() -> None:
     target_policies = target_policies.to(device)
 
     # nn.Linear shape matches Router.calibration_module exactly
-    head = nn.Linear(args.router_hidden_dim, len(CANONICAL_QUADRANT_ORDER)).to(device)
+    head = nn.Linear(args.calibration_input_dim, len(CANONICAL_QUADRANT_ORDER)).to(device)
     optimizer = torch.optim.AdamW(
         head.parameters(),
         lr=args.learning_rate,
@@ -575,7 +583,7 @@ def main() -> None:
         },
         "output_path": str(args.output_path),
         "dataset_size": dataset_size,
-        "hidden_dim": args.router_hidden_dim,
+        "hidden_dim": args.calibration_input_dim,
         "hyperparameters": {
             "beta": args.beta,
             "temperature": args.temperature,

@@ -1002,34 +1002,204 @@ class InputTransformer:
             )
         return pooled / norm
 
-    def maybe_center_representation(self, hidden_representation: Any) -> Any:
+    def _validate_hidden_representation(
+        self,
+        hidden_representation: Any,
+        name: str,
+    ) -> torch.Tensor:
+        """
+        Validate a 1D numeric hidden representation and return it as detached float32.
+
+        The returned tensor preserves the input device. Length is enforced
+        against self.economic_vector.shape[0] so axis/quadrant projections
+        stay in the same activation space the steering vectors were learned in.
+        """
+        if self.economic_vector is None:
+            raise ValueError(
+                "InputTransformer.economic_vector is not set; "
+                "load_steering_vectors must run before scoring"
+            )
+        if not isinstance(hidden_representation, torch.Tensor):
+            raise ValueError(
+                f"{name} must be a torch.Tensor, "
+                f"got {type(hidden_representation).__name__}"
+            )
+        if hidden_representation.dim() != 1:
+            raise ValueError(
+                f"{name} must be a rank-1 tensor; "
+                f"got shape {tuple(hidden_representation.shape)}"
+            )
+        if hidden_representation.numel() == 0:
+            raise ValueError(f"{name} is empty (length 0)")
+        expected_dim = int(self.economic_vector.shape[0])
+        if hidden_representation.shape[0] != expected_dim:
+            raise ValueError(
+                f"{name} length {hidden_representation.shape[0]} does not match "
+                f"economic_vector length {expected_dim}"
+            )
+        tensor = hidden_representation.detach().to(dtype=torch.float32)
+        if not torch.isfinite(tensor).all().item():
+            raise ValueError(f"{name} contains NaN or inf entries")
+        return tensor
+
+    def maybe_center_representation(
+        self,
+        hidden_representation: Any,
+    ) -> torch.Tensor:
         """
         Optionally subtract a neutral reference representation before projection.
 
         Logic:
-        - use centering only if a neutral reference has been explicitly configured
-        - keep both centered and uncentered behavior easy to inspect
-        """
-        raise NotImplementedError
+        - validate hidden_representation as a 1D float numeric tensor whose
+          length matches self.economic_vector
+        - use_centering=False: return the validated tensor unchanged (detached,
+          float32). encode_prompt already produces a unit-norm vector, so this
+          path is a no-op for the prompt flow; the Editor passes a mixed
+          hidden state through this method as well, where preserving its
+          scale is intentional.
+        - use_centering=True: subtract self.neutral_reference and L2-normalize
+          so projections operate at the same scale as encode_prompt's
+          unit-norm output.
 
-    def compute_axis_scores(self, hidden_representation: Any) -> dict[str, float]:
+        Returns:
+        - detached float32 torch.Tensor on the same device as the input
+
+        Raises:
+        - ValueError naming the violated condition; centering with a missing
+          neutral_reference, shape mismatch, non-finite entries, and
+          non-positive post-centering norm all raise loudly.
+        """
+        hidden = self._validate_hidden_representation(
+            hidden_representation, "hidden_representation"
+        )
+
+        if not self.steering_config.use_centering:
+            return hidden
+
+        if self.neutral_reference is None:
+            raise ValueError(
+                "SteeringVectorConfig.use_centering=True requires a loaded "
+                "neutral_reference; got None"
+            )
+
+        neutral = self.neutral_reference.to(
+            device=hidden.device, dtype=torch.float32
+        )
+        if neutral.dim() != 1 or neutral.shape[0] != hidden.shape[0]:
+            raise ValueError(
+                f"neutral_reference shape {tuple(neutral.shape)} does not "
+                f"match hidden_representation shape {tuple(hidden.shape)}"
+            )
+
+        centered = hidden - neutral
+
+        if not torch.isfinite(centered).all().item():
+            raise ValueError(
+                "centered hidden representation contains NaN or inf entries"
+            )
+        if centered.dim() != 1 or centered.shape[0] != hidden.shape[0]:
+            raise ValueError(
+                f"centered hidden representation has unexpected shape "
+                f"{tuple(centered.shape)}"
+            )
+
+        norm = float(torch.linalg.vector_norm(centered).item())
+        if not math.isfinite(norm) or norm <= 0.0:
+            raise ValueError(
+                "centered hidden representation has non-positive or "
+                "non-finite L2 norm"
+            )
+        return centered / norm
+
+    def compute_axis_scores(
+        self,
+        hidden_representation: Any,
+    ) -> dict[str, float]:
         """
         Compute signed projections on economic and social axes.
 
-        Returns:
-        - dictionary with economic_score and social_score
-        """
-        raise NotImplementedError
+        Logic:
+        - validate hidden_representation as a 1D finite float tensor of the
+          expected hidden_dim
+        - dot with self.economic_vector and self.social_vector (temporarily
+          moved to the input's device; never permanently mutated)
 
-    def compute_quadrant_scores(self, hidden_representation: Any) -> dict[str, float]:
+        Returns:
+        - {"economic_score": float, "social_score": float}; no extra keys
+        """
+        hidden = self._validate_hidden_representation(
+            hidden_representation, "hidden_representation"
+        )
+
+        if self.economic_vector is None or self.social_vector is None:
+            raise ValueError(
+                "InputTransformer.economic_vector and social_vector must be "
+                "set; load_steering_vectors must run before compute_axis_scores"
+            )
+
+        economic_vector = self.economic_vector.to(
+            device=hidden.device, dtype=torch.float32
+        )
+        social_vector = self.social_vector.to(
+            device=hidden.device, dtype=torch.float32
+        )
+
+        economic_score = float(torch.dot(hidden, economic_vector).item())
+        social_score = float(torch.dot(hidden, social_vector).item())
+
+        for name, value in (
+            ("economic_score", economic_score),
+            ("social_score", social_score),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(f"{name} is not finite; got {value}")
+
+        return {
+            "economic_score": economic_score,
+            "social_score": social_score,
+        }
+
+    def compute_quadrant_scores(
+        self,
+        hidden_representation: Any,
+    ) -> dict[str, float]:
         """
         Derive canonical quadrant affinities from political-compass directions.
 
         Logic:
-        - compute scores for left_lib, left_auth, right_lib, right_auth
-        - use the canonical quadrant vectors built from signed axis combinations
+        - validate hidden_representation as a 1D finite float tensor of the
+          expected hidden_dim
+        - iterate CANONICAL_QUADRANT_ORDER (never dict.items()) and dot with
+          each canonical quadrant vector
+        - return a fresh dict whose key set equals CANONICAL_QUADRANT_ORDER
         """
-        raise NotImplementedError
+        hidden = self._validate_hidden_representation(
+            hidden_representation, "hidden_representation"
+        )
+
+        if not self.quadrant_vectors:
+            raise ValueError(
+                "InputTransformer.quadrant_vectors is empty; "
+                "load_steering_vectors must run before compute_quadrant_scores"
+            )
+
+        scores: dict[str, float] = {}
+        for quadrant in CANONICAL_QUADRANT_ORDER:
+            if quadrant not in self.quadrant_vectors:
+                raise ValueError(
+                    f"InputTransformer.quadrant_vectors is missing canonical "
+                    f"quadrant {quadrant!r}"
+                )
+            quadrant_vector = self.quadrant_vectors[quadrant].to(
+                device=hidden.device, dtype=torch.float32
+            )
+            score = float(torch.dot(hidden, quadrant_vector).item())
+            if not math.isfinite(score):
+                raise ValueError(
+                    f"quadrant_scores[{quadrant!r}] is not finite; got {score}"
+                )
+            scores[quadrant] = score
+        return scores
 
     def compute_bias_magnitude(
         self,
@@ -1039,23 +1209,80 @@ class InputTransformer:
         """
         Compute distance from political center in compass space.
 
-        Notes:
-        - this is useful for routing fallback behavior and later diagnostics
+        Logic:
+        - reject bool (which is an int subclass) and any non-numeric input
+        - reject NaN and inf inputs
+        - return sqrt(economic_score**2 + social_score**2) as a finite,
+          non-negative Python float
         """
-        raise NotImplementedError
+        for name, value in (
+            ("economic_score", economic_score),
+            ("social_score", social_score),
+        ):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"{name} must be int or float (not bool); "
+                    f"got {type(value).__name__}"
+                )
+            if math.isnan(value):
+                raise ValueError(f"{name} is NaN")
+            if math.isinf(value):
+                raise ValueError(f"{name} is infinite")
+
+        bias_magnitude = math.sqrt(
+            float(economic_score) ** 2 + float(social_score) ** 2
+        )
+
+        if not math.isfinite(bias_magnitude):
+            raise ValueError(
+                f"bias_magnitude is not finite; got {bias_magnitude}"
+            )
+        if bias_magnitude < 0:
+            raise ValueError(
+                f"bias_magnitude must be non-negative; got {bias_magnitude}"
+            )
+        return float(bias_magnitude)
 
     def transform(self, prompt_text: str) -> PromptState:
         """
         Full input-transformation pipeline.
 
         Flow:
-        - encode prompt
-        - optionally center representation
-        - compute axis scores
-        - compute quadrant scores
-        - package everything into PromptState
+        - encode prompt into the layer-20 unit-norm hidden representation
+        - optionally center it against the neutral reference
+        - compute economic / social axis projections
+        - compute canonical quadrant projections
+        - derive bias_magnitude from the axis scores
+        - package everything into a PromptState carrying minimal traceability
+          metadata (encoding_layer, pooling_method, vector_method,
+          use_final_aggregated_vectors, use_centering)
         """
-        raise NotImplementedError
+        hidden = self.encode_prompt(prompt_text)
+        centered = self.maybe_center_representation(hidden)
+        axis_scores = self.compute_axis_scores(centered)
+        quadrant_scores = self.compute_quadrant_scores(centered)
+        bias_magnitude = self.compute_bias_magnitude(
+            axis_scores["economic_score"],
+            axis_scores["social_score"],
+        )
+
+        metadata: dict[str, Any] = {
+            "encoding_layer": 20,
+            "pooling_method": self.steering_config.pooling_method,
+            "vector_method": self.steering_config.vector_method,
+            "use_final_aggregated_vectors": self.steering_config.use_final_aggregated_vectors,
+            "use_centering": self.steering_config.use_centering,
+        }
+
+        return PromptState(
+            prompt_text=prompt_text,
+            hidden_representation=centered,
+            economic_score=axis_scores["economic_score"],
+            social_score=axis_scores["social_score"],
+            quadrant_scores=quadrant_scores,
+            bias_magnitude=bias_magnitude,
+            metadata=metadata,
+        )
 
 
 # === CALIBRATED ROUTER TRAINING DATASET SCHEMA ===

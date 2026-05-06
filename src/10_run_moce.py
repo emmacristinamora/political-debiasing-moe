@@ -26,7 +26,8 @@ def _load_components_module() -> Any:
     Load src/09_moce_components.py via importlib.
 
     Returns:
-        The loaded module exposing Router and RouterConfig.
+        The loaded module exposing MoCE components such as Router, RouterConfig,
+        InputTransformer, Editor, ExpertManager, and MoCEEngine.
     """
     spec = importlib.util.spec_from_file_location("moce_components", COMPONENTS_PATH)
     if spec is None or spec.loader is None:
@@ -141,12 +142,13 @@ def main() -> None:
     router = build_router(args, moce_components)
     report_router_status(args, router)
 
-    # the rest of the MoCE pipeline -- InputTransformer, ExpertManager,
-    # Editor, MoCEEngine -- is not yet implemented (their methods still
-    # raise NotImplementedError). this entrypoint stops here rather than
-    # faking that path; once those components land, main() will construct
-    # MoCEEngine, hand it the router built above, and call engine.run(...).
-    print("(pipeline beyond Router is not yet implemented; nothing further to run)")
+    # This entrypoint intentionally stops after Router construction. InputTransformer
+    # and Editor are implemented, but the runtime cannot execute end-to-end until
+    # ExpertManager and the MoCEEngine decoding boundary are implemented.
+    print(
+        "(runtime stops after Router construction; ExpertManager and engine-side "
+        "decoding are not yet implemented)"
+    )
 
 
 if __name__ == "__main__":

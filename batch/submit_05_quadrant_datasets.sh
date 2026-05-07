@@ -137,7 +137,7 @@ run_source uk_press
 # HoC: 1.6M speeches — medium stratified sample (decade × party).
 # 150 000 speeches ≈ 75 000 chunks after the 30-word floor, ~1-2h on A100.
 run_source hoc \
-  --hoc-sample-n 150000 \
+  --hoc-sample-n 200000 \
   --min-chunk-tokens 30
 
 run_source reddit_liberal

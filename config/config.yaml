@@ -211,7 +211,7 @@ quadrant_dataset:
   # sliding window chunking
   chunking:
     chunk_size:       512   # window size in whitespace tokens
-    chunk_overlap:    128   # overlap between consecutive windows
+    chunk_overlap:    0   # overlap between consecutive windows
     min_chunk_tokens: 128   # discard windows shorter than this
   # quadrant retention thresholds
   thresholds:
@@ -219,7 +219,7 @@ quadrant_dataset:
     min_abs_soc:            0.0
     min_confidence_margin:  0.015
   # set to null to process all 1.6M speeches
-  hoc_sample_n: 100000
+  hoc_sample_n: 200000
   # model layer to pool for chunk embeddings
   pooling:
     layer:      20

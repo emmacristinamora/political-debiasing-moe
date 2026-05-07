@@ -70,7 +70,9 @@ for source_file in \
   uk_house_of_commons.jsonl \
   ec_press_releases.jsonl \
   uk_gov_press_releases.jsonl \
-  ire_gov_press_releases.jsonl
+  ire_gov_press_releases.jsonl \
+  us_media_articles.jsonl \
+  us_presidential_speeches.jsonl
 do
   if [ ! -s "${NORMALIZED_DIR}/${source_file}" ]; then
     echo "[error] ${NORMALIZED_DIR}/${source_file} is missing or empty — run normalize_corpora.py first"
@@ -145,6 +147,15 @@ run_source reddit_liberal
 # reddit_conservative is the largest source (~690K chunks).
 # Expected runtime: ~9-10h on A100 at batch_size=8.
 run_source reddit_conservative
+
+# us_media: 1 024 articles (NYP/NYT/WSJ, 2012-2024); a few articles are <128 words
+# so lower the min-chunk floor slightly.
+run_source us_media \
+  --min-chunk-tokens 64
+
+# us_speeches: 254 presidential speeches (1985-2026); all are long enough for
+# the default chunker.
+run_source us_speeches
 
 # ── final report ──────────────────────────────────────────────────────────────
 

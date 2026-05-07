@@ -35,6 +35,8 @@ NORMALIZED_FILES: Dict[str, str] = {
     "ec_press":            "ec_press_releases.jsonl",
     "uk_press":            "uk_gov_press_releases.jsonl",
     "ire_press":           "ire_gov_press_releases.jsonl",
+    "us_media":            "us_media_articles.jsonl",
+    "us_speeches":         "us_presidential_speeches.jsonl",
 }
 
 VALID_SOURCES = set(NORMALIZED_FILES.keys())

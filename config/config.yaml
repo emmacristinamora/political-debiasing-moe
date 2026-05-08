@@ -261,34 +261,108 @@ quadrant_dataset:
 # === 06 VALIDATE EXPERT DATASETS ===
 
 validate_expert_datasets:
-  # viable_topics: [economy, foreign_policy, health_education, governance_institutions]
+  # Topics allowed in the training and in-distribution validation pools.
+  # The held-out topic below must NOT appear here.
   viable_topics: [economy, foreign_policy, law_order, health_education, governance_institutions]
+
+  # Topic removed from training for every quadrant and saved as val_topic.
+  # This tests whether each expert generalizes to an unseen political topic.
   held_out_topic: immigration
-  target_n_per_quadrant: 800
-  source_cap_pct: 0.25
-  min_cell_size: 25
+
+  # Sampling strategy: cap each (quadrant × source × topic) cell at max_cell_size chunks.
+  # This prevents dominant cells from overwhelming an expert without forcing artificial
+  # source-family balance, which was unstable when quadrants have very different data availability.
+  sampling_mode: source_topic_cell_cap
+
+  # Maximum number of chunks kept from any single (source × topic) cell per quadrant.
+  # Cells smaller than this are kept whole; larger ones are randomly subsampled.
+  max_cell_size: 250
+
+  # Groups individual sources into broader source families (used for diagnostics only).
+  source_groups:
+    reddit:   [reddit_liberal, reddit_conservative]
+    press:    [allsides, ec_press, ire_press, uk_press, us_media]
+    speeches: [hoc, us_speeches]
+
   length_filter:
     min_tokens: 50
     max_tokens: 700
-  held_out_sources:              # one source per quadrant held out as val_source
-    right_auth: uk_press
+
+  # One source per quadrant removed from training and saved as val_source.
+  # This tests whether each expert generalizes to an unseen source/domain.
+  held_out_sources:
+    right_auth: allsides
     left_auth:  uk_press
-    left_lib:   hoc
+    left_lib:   ire_press
     right_lib:  uk_press
-  val_pct: 0.15                  # fraction of sampled chunks split to val_indist (doc-level)
+
+  # Fraction of the capped pool split into val_indist at document level.
+  val_pct: 0.15
+
+  # Random seed for reproducible sampling and train/validation splitting.
   random_seed: 42
+
   dedupe:
+    enabled: false
+    min_chunk_index_gap: 2
+
+  boilerplate_filter:
     enabled: true
-    min_chunk_index_gap: 2       # min gap between chunk indices within the same document
-  confidence_bins:
-    n_bins: 3
-    edges: [0.005, 0.010, 0.018, 1.0]  # bin edges; first = retention threshold
+
   sanity_checks:
-    max_source_pct_train: 0.70          # slightly looser than cap to allow rounding slack
+    # No single (source × topic) cell in train should exceed max_cell_size after the split.
+    max_cell_size_train: 250
+
+    # No single source should exceed 70% of a train split.
+    max_source_pct_train: 0.70
+
+    # No single topic should exceed 50% of a train split.
+    # Looser than before because cell capping naturally limits topic concentration.
+    max_topic_pct_train: 0.50
+
+    # Maximum allowed KL divergence between topic distributions across experts.
     max_topic_kl_divergence: 8.0
-    max_length_ratio: 1.30              # longest / shortest mean n_tokens across quadrants
-    max_conf_margin_ratio: 2.5          # longest / shortest mean conf_margin across quadrants
-    min_split_size: 15                  # min chunks per output split (< min_cell_size; handles left_auth edge case)
+
+    # Maximum allowed ratio between the largest and smallest mean chunk length across experts.
+    # Set to 3.0 because left_auth structurally has shorter HoC parliamentary chunks.
+    # The cell cap preserves this natural length variation rather than masking it.
+    max_length_ratio: 3.0
+
+    # Maximum allowed ratio between confidence margins across experts.
+    max_conf_margin_ratio: 2.5
+
+    # Minimum number of chunks required in each output split.
+    min_split_size: 15
+
+# validate_expert_datasets:
+#   # viable_topics: [economy, foreign_policy, health_education, governance_institutions]
+#   viable_topics: [economy, foreign_policy, law_order, health_education, governance_institutions]
+#   held_out_topic: immigration
+#   target_n_per_quadrant: 800
+#   source_cap_pct: 0.25
+#   min_cell_size: 25
+#   length_filter:
+#     min_tokens: 50
+#     max_tokens: 700
+#   held_out_sources:              # one source per quadrant held out as val_source
+#     right_auth: uk_press
+#     left_auth:  uk_press
+#     left_lib:   ire_press
+#     right_lib:  uk_press
+#   val_pct: 0.15                  # fraction of sampled chunks split to val_indist (doc-level)
+#   random_seed: 42
+#   dedupe:
+#     enabled: true
+#     min_chunk_index_gap: 2       # min gap between chunk indices within the same document
+#   confidence_bins:
+#     n_bins: 3
+#     edges: [0.005, 0.010, 0.018, 1.0]  # bin edges; first = retention threshold
+#   sanity_checks:
+#     max_source_pct_train: 0.70          # slightly looser than cap to allow rounding slack
+#     max_topic_kl_divergence: 8.0
+#     max_length_ratio: 1.30              # longest / shortest mean n_tokens across quadrants
+#     max_conf_margin_ratio: 2.5          # longest / shortest mean conf_margin across quadrants
+#     min_split_size: 15                  # min chunks per output split (< min_cell_size; handles left_auth edge case)
 
 
 # === 07 TRAIN EXPERTS ===
@@ -304,7 +378,7 @@ train_experts:
     bias: "none"
     task_type: "CAUSAL_LM"
   training:
-    num_train_epochs: 2
+    num_train_epochs: 3
     per_device_train_batch_size: 4
     gradient_accumulation_steps: 4
     learning_rate: 8.0e-5
@@ -319,7 +393,7 @@ train_experts:
   evaluation:
     eval_strategy: "epoch"
     save_strategy: "epoch"
-    save_total_limit: 2           # keep all 2 epoch checkpoints (one per epoch)
+    save_total_limit: 3           # keep all 3 epoch checkpoints (one per epoch)
     load_best_model_at_end: false
     metric_for_best_model: "eval_val_source_loss"
     greater_is_better: false

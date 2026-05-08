@@ -43,6 +43,8 @@ SOURCES = [
     "ec_press",
     "uk_press",
     "ire_press",
+    "us_media",
+    "us_speeches",
 ]
 
 SOURCE_LABELS = {
@@ -53,6 +55,8 @@ SOURCE_LABELS = {
     "ec_press":            "ec_press",
     "uk_press":            "uk_press",
     "ire_press":           "ire_press",
+    "us_media":            "us_media",
+    "us_speeches":         "us_speech",
 }
 
 

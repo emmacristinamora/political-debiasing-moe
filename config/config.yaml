@@ -340,4 +340,108 @@ train_experts:
   paths:
     train_validate_dir: "data/experts/train-validate"
     output_dir: "data/experts/training-outputs"
+
+
+# === ROUTER CALIBRATION ===
+
+router_calibration:
+  paths:
+    prompt_sources:
+      method12_path: data/experts/test_experts/methode_1+2_data.jsonl
+      method3_path: data/experts/test_experts/methode_3_data.jsonl
+      expert_validation_dir: data/experts/train-validate
+    steering_vectors:
+      economic_vector_path: data/steering-vectors/vectors/economic_vectors.pt
+      social_vector_path: data/steering-vectors/vectors/social_vectors.pt
+    expert_checkpoints:
+      left_lib_checkpoint: data/experts/training-outputs/left_lib/seed_42/best
+      left_auth_checkpoint: data/experts/training-outputs/left_auth/seed_42/best
+      right_lib_checkpoint: data/experts/training-outputs/right_lib/seed_42/best
+      right_auth_checkpoint: data/experts/training-outputs/right_auth/seed_42/best
+    output_dir: data/router
+    prompts_path: data/router/prompts.jsonl
+    features_path: data/router/features.jsonl
+    hidden_path: data/router/hidden.pt
+    records_path: data/router/records.jsonl
+    candidate_traces_path: data/router/candidate_traces.jsonl
+    splits_dir: data/router/splits
+    checkpoints_dir: data/router/checkpoints
+    reports_dir: data/router/reports
+
+  model:
+    base_model: mistralai/Mistral-7B-v0.1
+    dtype: bfloat16
+    device: cuda
+
+  input_transformer:
+    vector_method: logistic_regression
+    use_final_aggregated_vectors: true
+    selected_layers: [8, 12, 16, 20, 24]
+    pooling_method: mean
+    use_centering: false
+    neutral_reference_path: null
+    calibration_input_dim: 4096
+
+  prompt_set:
+    include_method12: true
+    include_method3: true
+    include_expert_validation: true
+    # val_source (~39k rows) and val_topic (~26k rows) are also supported but
+    # left out of the default to keep the corpus near 1k prompts. Add them to
+    # this list (or set max_prompts) to opt in.
+    expert_validation_splits: ["val_indist"]
+    max_prompts: null
+    seed: 42
+
+  candidate_policies:
+    include_heuristic_prior: true
+    include_uniform: true
+    sharpen_temperatures: [0.5]
+    soften_temperatures: [2.0]
+    include_opposite_heavy: true
+    include_adjacent_heavy: true
+    dirichlet_samples: 16
+    dirichlet_concentration: 64.0
+    min_probability: 1.0e-6
+    seed: 42
+
+  generation:
+    max_new_tokens: 256
+    temperature: 0.0
+    do_sample: false
+    top_p: 1.0
+
+  scoring:
+    score_temperature: 0.2
+    weights:
+      bias_radius: 1.0
+      quality: 0.5
+      refusal: 0.5
+      vagueness: 0.3
+      kl_to_prior: 0.1
+    normalize_bias_radius: true
+    baseline_bias_radius_path: null
+    judge:
+      enabled: false
+      provider: null
+      model: null
+
+  split:
+    train_fraction: 0.8
+    val_fraction: 0.1
+    test_fraction: 0.1
+    split_by: source
+    seed: 42
+
+  training:
+    beta: 1.0
+    temperature: 1.0
+    learning_rate: 1.0e-3
+    weight_decay: 1.0e-4
+    batch_size: 32
+    epochs: 20
+    kl_weight: 0.1
+    entropy_weight: 0.01
+    seed: 42
+    device: cuda
     # output layout: outputs/experts/{quadrant}/seed_{seed}/

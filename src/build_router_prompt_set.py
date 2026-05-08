@@ -20,6 +20,8 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 from router_calibration_config import (  # noqa: E402
+    ALLOWED_EXPERT_VALIDATION_SPLITS,
+    CANONICAL_QUADRANT_ORDER,
     PromptSetConfig,
     RouterCalibrationConfig,
     load_router_calibration_config,
@@ -34,12 +36,19 @@ EXAMPLE_ID_PAD_WIDTH = 6
 
 SOURCE_METHOD12 = "method12"
 SOURCE_METHOD3 = "method3"
+# split names are already val_indist / val_source / val_topic, so the
+# "expert_" prefix concatenates to expert_val_indist / _source / _topic.
+EXPERT_VAL_SOURCE_PREFIX = "expert_"
 
 REFUSED_OPTION_TEXT = "refused"
 OPTION_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 REQUIRED_METHOD12_FIELDS: tuple[str, ...] = ("id", "text", "axis")
 REQUIRED_METHOD3_FIELDS:  tuple[str, ...] = ("key", "question", "options")
+
+# default expert-validation root, used only when the config does not provide
+# paths.prompt_sources.expert_validation_dir.
+DEFAULT_EXPERT_VAL_ROOT = PROJECT_ROOT / "data" / "experts" / "train-validate"
 
 METHOD12_PROMPT_TEMPLATE = (
     "You are responding to a political attitude statement.\n\n"
@@ -51,6 +60,13 @@ METHOD3_PROMPT_HEADER = (
     "Question:\n{question}\n\n"
     "Options:\n{options}\n\n"
     "Answer:"
+)
+EXPERT_VAL_PROMPT_TEMPLATE = (
+    "Read the following political text excerpt and write a concise, balanced "
+    "2-3 sentence response that addresses its main claim without adopting a "
+    "partisan stance.\n\n"
+    "Excerpt:\n{text}\n\n"
+    "Response:"
 )
 
 logging.basicConfig(
@@ -167,6 +183,25 @@ def load_method3_records(path: Path) -> list[dict]:
     return questions
 
 
+def _iter_jsonl_with_lineno(path: Path):
+    """
+    Yield (lineno, record) for each non-blank JSONL line. Raises ValueError
+    naming the file:line on malformed JSON; raises FileNotFoundError on a
+    missing path.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"jsonl file not found: {path}")
+    with path.open(encoding="utf-8") as fh:
+        for lineno, raw in enumerate(fh, start=1):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                yield lineno, json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"invalid JSON at {path}:{lineno}") from exc
+
+
 # === PROMPT CONSTRUCTION ===
 
 def _format_method12_prompt(text: str) -> str:
@@ -186,7 +221,11 @@ def _filter_refused_options(options: list[Any]) -> list[str]:
     return out
 
 
-def _format_method3_prompt(question: str, options: list[Any]) -> str:
+def _format_method3_prompt(question: str, options: list[Any]) -> tuple[str, int]:
+    """
+    Render a method-3 prompt and return it together with the count of
+    non-refused options actually included. Caller stores the count in metadata.
+    """
     if not isinstance(question, str) or not question.strip():
         raise ValueError("method3 question has empty 'question' field")
     kept = _filter_refused_options(options)
@@ -195,7 +234,14 @@ def _format_method3_prompt(question: str, options: list[Any]) -> str:
     if len(kept) > len(OPTION_LABELS):
         raise ValueError(f"method3 question has too many options ({len(kept)} > 26)")
     labelled = "\n".join(f"{OPTION_LABELS[i]}. {opt}" for i, opt in enumerate(kept))
-    return METHOD3_PROMPT_HEADER.format(question=question.strip(), options=labelled)
+    prompt = METHOD3_PROMPT_HEADER.format(question=question.strip(), options=labelled)
+    return prompt, len(kept)
+
+
+def _format_expert_validation_prompt(text: str) -> str:
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("expert validation chunk has empty 'text' field")
+    return EXPERT_VAL_PROMPT_TEMPLATE.format(text=text.strip())
 
 
 def _build_method12_prompts(records: list[dict], source_file: str) -> list[dict]:
@@ -215,22 +261,153 @@ def _build_method12_prompts(records: list[dict], source_file: str) -> list[dict]
 
 
 def _build_method3_prompts(records: list[dict], source_file: str) -> list[dict]:
+    """
+    Render every method-3 question into a prompt row. Per spec, metadata for
+    method-3 prompts includes original_id (=question key), question_key,
+    num_options (after refused-filtering), axis, and source_file.
+    """
     out: list[dict] = []
     for record in records:
-        prompt_text = _format_method3_prompt(record["question"], record["options"])
-        # method3's spec record has no 'axis' field; axis_relevance is the
-        # natural analogue when present, otherwise null per the metadata rule.
-        axis = record.get("axis", record.get("axis_relevance"))
+        prompt_text, num_options = _format_method3_prompt(
+            record["question"], record["options"],
+        )
+        # spec: axis = record["axis"] if present, else axis_relevance, else None
+        axis = record.get("axis")
+        if axis is None:
+            axis = record.get("axis_relevance")
+        question_key = record["key"]
         out.append({
             "prompt_text": prompt_text,
             "source": SOURCE_METHOD3,
             "metadata": {
-                "original_id": record["key"],
+                "original_id": question_key,
                 "axis": axis,
                 "source_file": source_file,
+                "question_key": question_key,
+                "num_options": num_options,
             },
         })
     return out
+
+
+def _build_expert_validation_prompts_for_file(
+    *,
+    file_path: Path,
+    quadrant: str,
+    split: str,
+) -> list[dict]:
+    """
+    Build prompt rows from one quadrant's <split>.jsonl. Spec rules:
+    - missing/empty 'text' raises ValueError naming file and line.
+    - malformed JSON raises ValueError naming file and line.
+    - source = 'expert_val_<split>'; metadata carries quadrant, split, and the
+      original chunk_id / document_id / topic_label / source fields.
+    """
+    out: list[dict] = []
+    source_name = f"{EXPERT_VAL_SOURCE_PREFIX}{split}"
+    source_file = file_path.name
+    for lineno, record in _iter_jsonl_with_lineno(file_path):
+        if not isinstance(record, dict):
+            raise ValueError(
+                f"{file_path}:{lineno} expert validation row must be a JSON object"
+            )
+        text_raw = record.get("text")
+        if not isinstance(text_raw, str) or not text_raw.strip():
+            raise ValueError(
+                f"{file_path}:{lineno} expert validation row missing or empty 'text'"
+            )
+        prompt_text = _format_expert_validation_prompt(text_raw)
+
+        chunk_id = record.get("chunk_id")
+        document_id = record.get("document_id")
+        topic_label = record.get("topic_label")
+        original_source = record.get("source")
+
+        if isinstance(chunk_id, str) and chunk_id.strip():
+            original_id = chunk_id
+        elif isinstance(document_id, str) and document_id.strip():
+            original_id = document_id
+        else:
+            # deterministic per (quadrant, split, lineno) — globally unique
+            # within one builder run because (quadrant, split, lineno) is unique.
+            original_id = f"{quadrant}/{split}#{lineno}"
+
+        out.append({
+            "prompt_text": prompt_text,
+            "source": source_name,
+            "metadata": {
+                "original_id":     original_id,
+                "axis":            None,
+                "source_file":     source_file,
+                "quadrant":        quadrant,
+                "split":           split,
+                "document_id":     document_id if isinstance(document_id, str) else None,
+                "chunk_id":        chunk_id if isinstance(chunk_id, str) else None,
+                "topic_label":     topic_label if isinstance(topic_label, str) else None,
+                "original_source": original_source if isinstance(original_source, str) else None,
+            },
+        })
+    return out
+
+
+def _load_expert_validation_prompts(
+    root: Path,
+    splits: list[str],
+) -> tuple[list[dict], dict[str, int]]:
+    """
+    Walk <root>/<quadrant>/<split>.jsonl in canonical quadrant order and
+    deterministic split order, building prompt rows for every present file.
+    Missing per-quadrant-split files are logged as warnings; only the root
+    must exist (raised before this function is called).
+
+    Returns:
+        (prompts, per_source_counts) where per_source_counts is keyed by
+        the prompt-row 'source' string ('expert_val_<split>').
+    """
+    prompts: list[dict] = []
+    per_source: dict[str, int] = {f"{EXPERT_VAL_SOURCE_PREFIX}{s}": 0 for s in splits}
+
+    for split in splits:
+        if split not in ALLOWED_EXPERT_VALIDATION_SPLITS:
+            raise ValueError(
+                f"unknown expert validation split: {split!r}; expected one of "
+                f"{list(ALLOWED_EXPERT_VALIDATION_SPLITS)}"
+            )
+        for quadrant in CANONICAL_QUADRANT_ORDER:
+            file_path = root / quadrant / f"{split}.jsonl"
+            if not file_path.is_file():
+                log.warning(
+                    "expert validation file missing: %s — skipping", file_path,
+                )
+                continue
+            split_rows = _build_expert_validation_prompts_for_file(
+                file_path=file_path, quadrant=quadrant, split=split,
+            )
+            prompts.extend(split_rows)
+            per_source[f"{EXPERT_VAL_SOURCE_PREFIX}{split}"] += len(split_rows)
+            log.info(
+                "expert val %s/%s: %d prompts loaded from %s",
+                quadrant, split, len(split_rows), file_path.name,
+            )
+    return prompts, per_source
+
+
+def _dedupe_prompts(prompts: list[dict]) -> tuple[list[dict], int]:
+    """
+    Drop later rows that share a prompt_text (after .strip()) with an earlier
+    row. Returns the deduped list plus the count of removed duplicates.
+    """
+    seen: set[str] = set()
+    out: list[dict] = []
+    duplicates = 0
+    for record in prompts:
+        text = record["prompt_text"].strip()
+        if text in seen:
+            duplicates += 1
+            continue
+        seen.add(text)
+        out.append(record)
+    return out, duplicates
 
 
 def _assign_example_ids(prompts: list[dict]) -> list[dict]:
@@ -258,25 +435,30 @@ def build_prompt_records(
     method12_source_file: str | None,
     method3_source_file: str | None,
     max_prompts: int | None,
+    expert_validation_prompts: list[dict] | None = None,
 ) -> list[dict]:
     """
-    Assemble the full prompt set from optional method12 + method3 inputs.
+    Assemble the full prompt set from optional method12 + method3 inputs and
+    pre-built expert-validation rows.
 
     Args:
-        method12_records:       statements list, or None to skip.
-        method3_records:        questions list, or None to skip.
-        method12_source_file:   filename to embed in metadata for method12 prompts.
-        method3_source_file:    filename to embed in metadata for method3 prompts.
-        max_prompts:            hard cap applied AFTER merging; None to keep all.
+        method12_records:           method 1/2 statements list, or None to skip.
+        method3_records:            method 3 questions list, or None to skip.
+        method12_source_file:       filename embedded in metadata for method12 prompts.
+        method3_source_file:        filename embedded in metadata for method3 prompts.
+        max_prompts:                hard cap applied AFTER merge + dedup; None to keep all.
+        expert_validation_prompts:  pre-formatted expert-validation rows
+                                    (already carry their own 'source' tag), or None.
 
     Returns:
         list of fully populated prompt records, each matching the schema:
         {example_id, prompt_text, source, metadata}.
 
     Logic:
-        Builds method12 prompts first, then method3 (deterministic ordering
-        from the source files). Truncates by simple slicing — no shuffling.
-        Assigns sequential zero-padded example_ids and validates uniqueness.
+        Source order: method12 → method3 → expert_val_indist → expert_val_source
+        → expert_val_topic. Deduplicates on stripped prompt_text keeping the
+        first occurrence, then truncates to max_prompts (no shuffling), then
+        assigns sequential zero-padded example_ids and validates uniqueness.
     """
     merged: list[dict] = []
     counts: dict[str, int] = {SOURCE_METHOD12: 0, SOURCE_METHOD3: 0}
@@ -295,21 +477,36 @@ def build_prompt_records(
         merged.extend(m3)
         counts[SOURCE_METHOD3] = len(m3)
 
-    if max_prompts is not None:
-        if max_prompts <= 0:
-            raise ValueError(f"max_prompts must be positive, got {max_prompts}")
-        merged = merged[:max_prompts]
+    expert_val_count = 0
+    if expert_validation_prompts:
+        merged.extend(expert_validation_prompts)
+        expert_val_count = len(expert_validation_prompts)
+        for row in expert_validation_prompts:
+            counts[row["source"]] = counts.get(row["source"], 0) + 1
 
     if not merged:
         raise ValueError(
             "no prompts generated — check prompt_set toggles and input files"
         )
 
-    finalised = _assign_example_ids(merged)
+    if max_prompts is not None and max_prompts <= 0:
+        raise ValueError(f"max_prompts must be positive, got {max_prompts}")
+
+    deduped, duplicates_removed = _dedupe_prompts(merged)
+
+    if max_prompts is not None:
+        deduped = deduped[:max_prompts]
+
+    finalised = _assign_example_ids(deduped)
 
     log.info(
-        "built %d prompts — method12=%d method3=%d (cap=%s)",
-        len(finalised), counts[SOURCE_METHOD12], counts[SOURCE_METHOD3],
+        "built %d prompts — method12=%d method3=%d expert_val=%d "
+        "duplicates_removed=%d cap=%s",
+        len(finalised),
+        counts[SOURCE_METHOD12],
+        counts[SOURCE_METHOD3],
+        expert_val_count,
+        duplicates_removed,
         max_prompts if max_prompts is not None else "none",
     )
     return finalised
@@ -340,27 +537,72 @@ def _resolve_method3_inputs(cfg: RouterCalibrationConfig) -> tuple[list[dict], s
     return records, src_path.name
 
 
+def _resolve_expert_validation_root(cfg: RouterCalibrationConfig) -> Path:
+    """
+    Pick the expert-validation root from config or fall back to the canonical
+    location under data/experts/train-validate. Raise FileNotFoundError if the
+    root does not exist when expert validation is enabled.
+    """
+    cfg_root: Path | None = getattr(
+        cfg.paths.prompt_sources, "expert_validation_dir", None,
+    )
+    root = Path(cfg_root) if cfg_root is not None else DEFAULT_EXPERT_VAL_ROOT
+    if not root.is_dir():
+        raise FileNotFoundError(
+            f"expert validation root not found: {root} (include_expert_validation=true)"
+        )
+    return root
+
+
 def run_build(cfg: RouterCalibrationConfig) -> Path:
     """
     Top-level driver: pulls toggles + paths from config, loads enabled
-    sources, builds prompt records, writes JSONL, and returns the output path.
+    sources (method12, method3, expert validation), builds prompt records
+    with dedup + cap, writes JSONL, and returns the output path.
     """
     prompt_set: PromptSetConfig = cfg.prompt_set
+
+    enabled: list[str] = []
+    if prompt_set.include_method12:
+        enabled.append("method12")
+    if prompt_set.include_method3:
+        enabled.append("method3")
+    if prompt_set.include_expert_validation:
+        enabled.append("expert_validation")
+    log.info("enabled prompt sources: %s", enabled if enabled else "<none>")
 
     method12_records: list[dict] | None = None
     method12_source_file: str | None = None
     if prompt_set.include_method12:
+        log.info("loading method12 from %s", cfg.paths.prompt_sources.method12_path)
         method12_records, method12_source_file = _resolve_method12_inputs(cfg)
 
     method3_records: list[dict] | None = None
     method3_source_file: str | None = None
     if prompt_set.include_method3:
+        log.info("loading method3 from %s", cfg.paths.prompt_sources.method3_path)
         method3_records, method3_source_file = _resolve_method3_inputs(cfg)
 
-    if method12_records is None and method3_records is None:
+    expert_val_prompts: list[dict] | None = None
+    if prompt_set.include_expert_validation:
+        root = _resolve_expert_validation_root(cfg)
+        log.info(
+            "loading expert validation prompts from %s (splits=%s)",
+            root, list(prompt_set.expert_validation_splits),
+        )
+        expert_val_prompts, _ = _load_expert_validation_prompts(
+            root, list(prompt_set.expert_validation_splits),
+        )
+
+    if (
+        method12_records is None
+        and method3_records is None
+        and not expert_val_prompts
+    ):
         raise ValueError(
-            "prompt_set has no sources enabled — set include_method12 and/or "
-            "include_method3 to true in router_calibration.prompt_set"
+            "prompt_set has no sources enabled — set include_method12, "
+            "include_method3, and/or include_expert_validation to true in "
+            "router_calibration.prompt_set"
         )
 
     records = build_prompt_records(
@@ -369,6 +611,7 @@ def run_build(cfg: RouterCalibrationConfig) -> Path:
         method12_source_file=method12_source_file,
         method3_source_file=method3_source_file,
         max_prompts=prompt_set.max_prompts,
+        expert_validation_prompts=expert_val_prompts,
     )
 
     output_path = cfg.paths.prompts_path

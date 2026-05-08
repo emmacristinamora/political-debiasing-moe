@@ -126,11 +126,18 @@ class InputTransformerConfig:
     calibration_input_dim: int
 
 
+ALLOWED_EXPERT_VALIDATION_SPLITS: tuple[str, ...] = (
+    "val_indist", "val_source", "val_topic",
+)
+DEFAULT_EXPERT_VALIDATION_SPLITS: tuple[str, ...] = ALLOWED_EXPERT_VALIDATION_SPLITS
+
+
 @dataclass
 class PromptSetConfig:
     include_method12: bool
     include_method3: bool
     include_expert_validation: bool
+    expert_validation_splits: list[str]
     max_prompts: int | None
     seed: int
 
@@ -485,23 +492,56 @@ def _parse_input_transformer(raw: Any) -> InputTransformerConfig:
 def _parse_prompt_set(raw: Any) -> PromptSetConfig:
     if not isinstance(raw, dict):
         raise ValueError("router_calibration.prompt_set must be a mapping")
+    # include_expert_validation and expert_validation_splits are optional with
+    # safe defaults so older config.yaml files load unchanged.
     _require_keys(
         raw,
-        (
-            "include_method12",
-            "include_method3",
-            "include_expert_validation",
-            "max_prompts",
-            "seed",
-        ),
+        ("include_method12", "include_method3", "max_prompts", "seed"),
         "prompt_set",
     )
+
+    if "include_expert_validation" in raw:
+        include_expert_validation = _require_bool(
+            raw["include_expert_validation"], "prompt_set.include_expert_validation",
+        )
+    else:
+        include_expert_validation = False
+
+    if "expert_validation_splits" in raw:
+        splits_raw = raw["expert_validation_splits"]
+        if not isinstance(splits_raw, list) or not splits_raw:
+            raise ValueError(
+                "router_calibration.prompt_set.expert_validation_splits must be a "
+                f"non-empty list, got {splits_raw!r}"
+            )
+        seen: set[str] = set()
+        splits: list[str] = []
+        for i, item in enumerate(splits_raw):
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(
+                    f"router_calibration.prompt_set.expert_validation_splits[{i}] "
+                    f"must be a non-empty string, got {item!r}"
+                )
+            if item not in ALLOWED_EXPERT_VALIDATION_SPLITS:
+                raise ValueError(
+                    f"router_calibration.prompt_set.expert_validation_splits[{i}] "
+                    f"= {item!r} not in {list(ALLOWED_EXPERT_VALIDATION_SPLITS)}"
+                )
+            if item in seen:
+                raise ValueError(
+                    "router_calibration.prompt_set.expert_validation_splits has "
+                    f"duplicate entry {item!r}"
+                )
+            seen.add(item)
+            splits.append(item)
+    else:
+        splits = list(DEFAULT_EXPERT_VALIDATION_SPLITS)
+
     return PromptSetConfig(
         include_method12=_require_bool(raw["include_method12"], "prompt_set.include_method12"),
         include_method3=_require_bool(raw["include_method3"], "prompt_set.include_method3"),
-        include_expert_validation=_require_bool(
-            raw["include_expert_validation"], "prompt_set.include_expert_validation"
-        ),
+        include_expert_validation=include_expert_validation,
+        expert_validation_splits=splits,
         max_prompts=_require_optional_positive_int(raw["max_prompts"], "prompt_set.max_prompts"),
         seed=_require_int(raw["seed"], "prompt_set.seed"),
     )

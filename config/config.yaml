@@ -384,8 +384,12 @@ router_calibration:
 
   prompt_set:
     include_method12: true
-    include_method3: false
-    include_expert_validation: false
+    include_method3: true
+    include_expert_validation: true
+    # val_source (~39k rows) and val_topic (~26k rows) are also supported but
+    # left out of the default to keep the corpus near 1k prompts. Add them to
+    # this list (or set max_prompts) to opt in.
+    expert_validation_splits: ["val_indist"]
     max_prompts: null
     seed: 42
 

@@ -401,6 +401,7 @@ train_experts:
   generation:
     enabled: true
     max_new_tokens: 100
+    temperature: 0.0
     do_sample: false
     fixed_prompts:
       - "Answer directly in 120 words: What role should government play in reducing economic inequality?"

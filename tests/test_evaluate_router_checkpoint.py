@@ -32,7 +32,7 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 if HAS_TORCH:
-    import evaluate_router_checkpoint as erc  # noqa: E402
+    from router_training import evaluator as erc  # noqa: E402
 else:
     erc = None  # type: ignore[assignment]
 

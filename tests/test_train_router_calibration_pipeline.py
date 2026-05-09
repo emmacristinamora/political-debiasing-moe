@@ -22,7 +22,7 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import train_router_calibration_pipeline as trcp  # noqa: E402
+from router_training import train_pipeline as trcp  # noqa: E402
 
 
 # === FIXTURE HELPERS ===

@@ -20,13 +20,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # === MODULE LOADING ===
 
-# router_calibration_config sits next to this script in src/. add src/ to
-# sys.path so it can be imported by name regardless of cwd.
-_SRC_DIR = Path(__file__).resolve().parent
+# router_training.config lives in the same package. add src/ to sys.path so
+# the package can be imported by name regardless of cwd.
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import (  # noqa: E402
+from router_training.config import (  # noqa: E402
     RouterCalibrationConfig,
     load_router_calibration_config,
 )
@@ -51,7 +51,7 @@ PromptState = moce_components.PromptState
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 REQUIRED_PROMPT_FIELDS: tuple[str, ...] = (
     "example_id",

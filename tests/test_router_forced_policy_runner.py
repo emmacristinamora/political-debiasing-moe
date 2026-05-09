@@ -20,7 +20,7 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import router_forced_policy_runner as rfp  # noqa: E402
+from router_training import forced_policy_runner as rfp  # noqa: E402
 
 CANONICAL = ("left_lib", "left_auth", "right_lib", "right_auth")
 

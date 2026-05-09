@@ -21,7 +21,7 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import score_router_candidates as scr  # noqa: E402
+from router_training import scorer as scr  # noqa: E402
 
 CANONICAL = ("left_lib", "left_auth", "right_lib", "right_auth")
 
@@ -505,7 +505,7 @@ class StreamScoreJSONLTests(unittest.TestCase):
 class FromRouterCalibrationAdapterTests(unittest.TestCase):
 
     def test_maps_all_fields(self) -> None:
-        from router_calibration_config import (
+        from router_training.config import (
             JudgeConfig,
             ScoringConfig as RCScoringConfig,
             ScoringWeights,

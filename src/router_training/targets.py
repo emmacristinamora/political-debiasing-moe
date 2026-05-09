@@ -16,22 +16,22 @@ from pathlib import Path
 from typing import Any
 
 
-# router_calibration_config and router_calibration_utils are both torch-free.
-_SRC_DIR = Path(__file__).resolve().parent
+# router_training.config and router_training.utils are both torch-free.
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import (  # noqa: E402
+from router_training.config import (  # noqa: E402
     CANONICAL_QUADRANT_ORDER,
     RouterCalibrationConfig,
     load_router_calibration_config,
 )
-from router_calibration_utils import apply_min_probability  # noqa: E402
+from router_training.utils import apply_min_probability  # noqa: E402
 
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # step 1's RouterPaths does not have a dedicated candidate_scores_path or
 # target_report_path; default both relative to paths.output_dir to avoid

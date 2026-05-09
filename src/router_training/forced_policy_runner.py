@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Any
 
 
-# router_calibration_config carries CANONICAL_QUADRANT_ORDER and does not
+# router_training.config carries CANONICAL_QUADRANT_ORDER and does not
 # require torch — safe to import at module load time.
-_SRC_DIR = Path(__file__).resolve().parent
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import CANONICAL_QUADRANT_ORDER  # noqa: E402
+from router_training.config import CANONICAL_QUADRANT_ORDER  # noqa: E402
 
 
 # === LAZY LOAD: RouterState ===

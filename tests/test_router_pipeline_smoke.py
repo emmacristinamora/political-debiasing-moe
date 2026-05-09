@@ -20,8 +20,8 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import run_router_pipeline_smoke as smoke  # noqa: E402
-from validate_router_dataset import validate_router_dataset  # noqa: E402
+from router_training import smoke  # noqa: E402
+from router_training.validator import validate_router_dataset  # noqa: E402
 
 
 # === TESTS ===
@@ -60,7 +60,7 @@ class SmokeReportShapeTests(unittest.TestCase):
         for entry in report["command"]:
             self.assertIsInstance(entry, str)
         # command points at the trainer
-        self.assertIn("src/train_calibrated_router.py", report["command"])
+        self.assertIn("src/router_training/trainer.py", report["command"])
 
     def test_split_counts_sum_to_num_records(self) -> None:
         report = smoke.run_smoke()

@@ -27,7 +27,7 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import build_router_features as brf  # noqa: E402
+from router_training import features as brf  # noqa: E402
 
 # pull moce_components from inside the script so tests use the exact same
 # class objects the code under test sees.

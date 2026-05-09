@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import Any
 
 
-# router_calibration_config is torch-free.
-_SRC_DIR = Path(__file__).resolve().parent
+# router_training.config is torch-free.
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import (  # noqa: E402
+from router_training.config import (  # noqa: E402
     RouterCalibrationConfig,
     load_router_calibration_config,
 )
@@ -28,7 +28,7 @@ from router_calibration_config import (  # noqa: E402
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 SPLIT_NAMES: tuple[str, ...] = ("train", "val", "test")
 RECORDS_FILENAME: str = "records.jsonl"

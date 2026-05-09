@@ -16,30 +16,30 @@ from typing import Any
 
 
 # every module imported below is torch-free.
-_SRC_DIR = Path(__file__).resolve().parent
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import CANONICAL_QUADRANT_ORDER  # noqa: E402
-from router_calibration_utils import (  # noqa: E402
+from router_training.config import CANONICAL_QUADRANT_ORDER  # noqa: E402
+from router_training.utils import (  # noqa: E402
     CandidatePolicyConfig,
     generate_candidate_policies,
 )
-from build_router_targets import (  # noqa: E402
+from router_training.targets import (  # noqa: E402
     TargetBuildConfig,
     build_target_for_example,
 )
-from validate_router_dataset import validate_router_dataset  # noqa: E402
-from split_router_dataset import (  # noqa: E402
+from router_training.validator import validate_router_dataset  # noqa: E402
+from router_training.splitter import (  # noqa: E402
     SplitBuildConfig,
     split_records,
 )
-from train_router_calibration_pipeline import build_training_command  # noqa: E402
+from router_training.train_pipeline import build_training_command  # noqa: E402
 
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_PATH: Path = (
     PROJECT_ROOT / "data" / "router" / "smoke_pipeline_report.json"
 )

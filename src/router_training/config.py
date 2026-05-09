@@ -14,7 +14,7 @@ import yaml
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 CANONICAL_QUADRANT_ORDER: tuple[str, ...] = (
     "left_lib",

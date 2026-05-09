@@ -20,7 +20,7 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import split_router_dataset as srs  # noqa: E402
+from router_training import splitter as srs  # noqa: E402
 
 
 # === HELPERS ===

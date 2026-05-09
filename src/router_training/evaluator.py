@@ -18,16 +18,16 @@ import torch
 from torch import nn
 
 
-# router_calibration_config and validate_router_dataset are torch-free.
-_SRC_DIR = Path(__file__).resolve().parent
+# router_training.config and router_training.validator are torch-free.
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import (  # noqa: E402
+from router_training.config import (  # noqa: E402
     CANONICAL_QUADRANT_ORDER,
     load_router_calibration_config,
 )
-from validate_router_dataset import (  # noqa: E402
+from router_training.validator import (  # noqa: E402
     load_records_jsonl,
     parse_hidden_ref,
     validate_router_dataset,
@@ -36,7 +36,7 @@ from validate_router_dataset import (  # noqa: E402
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # fallback locations (relative to PROJECT_ROOT) used only when the config does
 # not provide the corresponding directory. exact strings match the spec.

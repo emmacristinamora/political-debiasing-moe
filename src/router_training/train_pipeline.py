@@ -14,15 +14,15 @@ from pathlib import Path
 from typing import Any
 
 
-# router_calibration_config and validate_router_dataset are torch-free.
-_SRC_DIR = Path(__file__).resolve().parent
+# router_training.config and router_training.validator are torch-free.
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import (  # noqa: E402
+from router_training.config import (  # noqa: E402
     load_router_calibration_config,
 )
-from validate_router_dataset import (  # noqa: E402
+from router_training.validator import (  # noqa: E402
     load_hidden_tensor_safe,
     load_records_jsonl,
     validate_router_dataset,
@@ -31,9 +31,9 @@ from validate_router_dataset import (  # noqa: E402
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-TRAINER_SCRIPT_RELATIVE = Path("src/train_calibrated_router.py")
+TRAINER_SCRIPT_RELATIVE = Path("src/router_training/trainer.py")
 
 SPLIT_NAMES: tuple[str, ...] = ("train", "val", "test")
 RECORDS_FILENAME: str = "records.jsonl"

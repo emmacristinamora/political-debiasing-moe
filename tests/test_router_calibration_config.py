@@ -24,7 +24,7 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import router_calibration_config as rcc  # noqa: E402
+from router_training import config as rcc  # noqa: E402
 
 
 # === HELPERS ===

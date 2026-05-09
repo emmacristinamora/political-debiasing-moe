@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Any
 
 
-# router_calibration_config lives next to this script in src/. add the parent
-# directory to sys.path so it can be imported by name regardless of cwd.
-_SRC_DIR = Path(__file__).resolve().parent
+# router_training.config lives in the same package. add src/ to sys.path so
+# the package can be imported by name regardless of cwd.
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import (  # noqa: E402
+from router_training.config import (  # noqa: E402
     ALLOWED_EXPERT_VALIDATION_SPLITS,
     CANONICAL_QUADRANT_ORDER,
     PromptSetConfig,
@@ -30,7 +30,7 @@ from router_calibration_config import (  # noqa: E402
 
 # === CONSTANTS ===
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_ID_PREFIX = "router_prompt_"
 EXAMPLE_ID_PAD_WIDTH = 6
 

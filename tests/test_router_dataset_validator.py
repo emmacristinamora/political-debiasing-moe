@@ -21,7 +21,7 @@ _SRC_DIR = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-import validate_router_dataset as vrd  # noqa: E402
+from router_training import validator as vrd  # noqa: E402
 
 CANONICAL = ("left_lib", "left_auth", "right_lib", "right_auth")
 
@@ -331,10 +331,9 @@ class HelperFunctionTests(unittest.TestCase):
 
 class TorchAvailabilityTests(unittest.TestCase):
 
-    def test_torch_missing_does_not_block_structural_validation(self) -> None:
-        # this test environment has no torch installed; structural checks
-        # must still pass and hidden_tensor=None must be accepted
-        self.assertIsNone(vrd._try_import_torch())
+    def test_structural_validation_accepts_none_hidden_tensor(self) -> None:
+        # structural checks must pass and hidden_tensor=None must be accepted
+        # regardless of whether torch is installed.
         records = [_make_record(f"ex{i}", row_index=i) for i in range(2)]
         vrd.validate_router_dataset(records, hidden_tensor=None)
 

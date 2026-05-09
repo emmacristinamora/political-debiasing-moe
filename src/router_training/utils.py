@@ -12,15 +12,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# router_calibration_config sits next to this module in src/ and owns the
-# canonical quadrant order plus the YAML-loaded CandidatePoliciesConfig dataclass.
-# add src/ to sys.path so the import works regardless of cwd, mirroring the
-# pattern in src/build_router_prompt_set.py and src/build_router_features.py.
-_SRC_DIR = Path(__file__).resolve().parent
+# router_training.config lives in the same package and owns the canonical
+# quadrant order plus the YAML-loaded CandidatePoliciesConfig dataclass.
+# add src/ to sys.path so the package import works regardless of cwd.
+_SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from router_calibration_config import (  # noqa: E402
+from router_training.config import (  # noqa: E402
     CANONICAL_QUADRANT_ORDER,
     CandidatePoliciesConfig,
 )

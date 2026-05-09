@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import math
@@ -16,19 +17,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-import torch
-import torch.nn.functional as F
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
+try:
+    import torch
+    import torch.nn.functional as F
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    _HAS_TORCH = True
+except ImportError:
+    _HAS_TORCH = False
 
 
 # === CONSTANTS ===
 
-PROJECT_ROOT  = Path(__file__).resolve().parents[1]
-TEST_DATA_DIR = PROJECT_ROOT / "data" / "experts" / "test_experts"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 EXPERT_NAMES = [
     "econ_left_authoritarian",
@@ -38,11 +41,15 @@ EXPERT_NAMES = [
 ]
 BASE_CONDITION = "base"
 
-_DTYPE_MAP: dict[str, torch.dtype] = {
-    "bfloat16": torch.bfloat16,
-    "float16":  torch.float16,
-    "float32":  torch.float32,
-}
+_DTYPE_MAP: dict[str, Any] = (
+    {
+        "bfloat16": torch.bfloat16,
+        "float16":  torch.float16,
+        "float32":  torch.float32,
+    }
+    if _HAS_TORCH
+    else {"bfloat16": "bfloat16", "float16": "float16", "float32": "float32"}
+)
 
 # Matches "Answer on the following scale: ..." sentence at end of persona prompts.
 _SCALE_INSTRUCTION_RE = re.compile(
@@ -339,6 +346,43 @@ def compute_pct_projection(
     }
 
 
+# === DRY-RUN STUBS ===
+
+def _dry_run_project(key: str, condition_name: str) -> dict:
+    """
+    Deterministic fake PCT coordinates for --dry-run.
+    Biased toward the condition's own quadrant so match-rate stats are non-trivial.
+    """
+    h = int(hashlib.md5(f"{condition_name}:{key}".encode()).hexdigest()[:8], 16)
+    econ_bias = 0.3 if "right" in condition_name else -0.3
+    soc_bias  = 0.3 if "auth"  in condition_name else -0.3
+    noise_e   = ((h & 0xFF) / 255.0 - 0.5) * 0.4
+    noise_s   = (((h >> 8) & 0xFF) / 255.0 - 0.5) * 0.4
+    e = max(-1.0, min(1.0, econ_bias + noise_e))
+    s = max(-1.0, min(1.0, soc_bias  + noise_s))
+    return {
+        "pct_economic":       round(e, 6),
+        "pct_social":         round(s, 6),
+        "predicted_quadrant": quadrant_from_coordinates(e, s),
+    }
+
+
+def _dry_run_score_options(options: list[str]) -> list[dict]:
+    """Stub NLL scores — first option always wins."""
+    return [
+        {
+            "option_index":       i,
+            "option_label":       chr(ord("A") + i),
+            "option_text":        opt,
+            "scored_option_text": " " + opt,
+            "total_nll":          float(i + 1),
+            "avg_nll":            float(i + 1) / max(len(opt.split()), 1),
+            "num_option_tokens":  len(opt.split()),
+        }
+        for i, opt in enumerate(options)
+    ]
+
+
 # === GENERATION ===
 
 def strip_scale_instruction_from_persona(text: str) -> str:
@@ -472,13 +516,14 @@ def run_method1(
     tokenizer: AutoTokenizer,
     condition: ExpertCondition,
     statements: list[dict],
-    econ_vector: torch.Tensor,
-    social_vector: torch.Tensor,
+    econ_vector: Optional[torch.Tensor],
+    social_vector: Optional[torch.Tensor],
     projection_layer: int,
     gen_config: GenerationConfig,
     output_path: Path,
     limit: Optional[int],
     device: str,
+    dry_run: bool = False,
 ) -> list[dict]:
     """
     Method 1 — Representativeness.
@@ -497,13 +542,18 @@ def run_method1(
     records: list[dict] = []
 
     for idx, stmt in enumerate(stmts):
-        prompt    = build_method1_prompt(stmt["text"])
-        generated = generate_response(model, tokenizer, prompt, gen_config, device)
-        proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
-        proj      = compute_pct_projection(
-            model, tokenizer, proj_text,
-            econ_vector, social_vector, projection_layer, device,
-        )
+        prompt = build_method1_prompt(stmt["text"])
+        if dry_run:
+            generated = "[DRY-RUN]"
+            proj      = _dry_run_project(stmt["id"], condition.name)
+            proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
+        else:
+            generated = generate_response(model, tokenizer, prompt, gen_config, device)
+            proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
+            proj      = compute_pct_projection(
+                model, tokenizer, proj_text,
+                econ_vector, social_vector, projection_layer, device,
+            )
 
         matches = None
         if condition.target_quadrant is not None:
@@ -545,8 +595,8 @@ def run_method2(
     condition: ExpertCondition,
     statements: list[dict],
     personas: dict[str, dict],
-    econ_vector: torch.Tensor,
-    social_vector: torch.Tensor,
+    econ_vector: Optional[torch.Tensor],
+    social_vector: Optional[torch.Tensor],
     projection_layer: int,
     gen_config: GenerationConfig,
     output_path: Path,
@@ -554,6 +604,7 @@ def run_method2(
     limit: Optional[int],
     device: str,
     warnings: list[str],
+    dry_run: bool = False,
 ) -> None:
     """
     Method 2 — Inverse Steerability.
@@ -613,13 +664,18 @@ def run_method2(
         )
 
         for stmt in stmts:
-            prompt    = build_method2_prompt(persona_data["text"], stmt["text"])
-            generated = generate_response(model, tokenizer, prompt, gen_config, device)
-            proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
-            proj      = compute_pct_projection(
-                model, tokenizer, proj_text,
-                econ_vector, social_vector, projection_layer, device,
-            )
+            prompt = build_method2_prompt(persona_data["text"], stmt["text"])
+            if dry_run:
+                generated = "[DRY-RUN]"
+                proj      = _dry_run_project(f"{persona_id}:{stmt['id']}", condition.name)
+                proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
+            else:
+                generated = generate_response(model, tokenizer, prompt, gen_config, device)
+                proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
+                proj      = compute_pct_projection(
+                    model, tokenizer, proj_text,
+                    econ_vector, social_vector, projection_layer, device,
+                )
 
             baseline = m1_index.get(stmt["id"])
             if baseline is not None:
@@ -677,13 +733,14 @@ def run_method3(
     tokenizer: AutoTokenizer,
     condition: ExpertCondition,
     questions: list[dict],
-    econ_vector: torch.Tensor,
-    social_vector: torch.Tensor,
+    econ_vector: Optional[torch.Tensor],
+    social_vector: Optional[torch.Tensor],
     projection_layer: int,
     output_path: Path,
     limit: Optional[int],
     device: str,
     warnings: list[str],
+    dry_run: bool = False,
 ) -> None:
     """
     Method 3 — Consistency.
@@ -708,7 +765,11 @@ def run_method3(
             continue
 
         prompt = build_method3_prompt(q["question"], valid_options)
-        scored = score_options_by_avg_nll(model, tokenizer, prompt, valid_options, device)
+        scored = (
+            _dry_run_score_options(valid_options)
+            if dry_run
+            else score_options_by_avg_nll(model, tokenizer, prompt, valid_options, device)
+        )
 
         if not scored:
             msg = f"[method3] question '{q['key']}' produced no scored options — skipping"
@@ -719,9 +780,13 @@ def run_method3(
         best        = min(scored, key=lambda x: x["avg_nll"])
         picked_text = best["option_text"]
         proj_text   = f"{q['question']}\n\nAnswer:\n{picked_text}"
-        proj        = compute_pct_projection(
-            model, tokenizer, proj_text,
-            econ_vector, social_vector, projection_layer, device,
+        proj        = (
+            _dry_run_project(q["key"], condition.name)
+            if dry_run
+            else compute_pct_projection(
+                model, tokenizer, proj_text,
+                econ_vector, social_vector, projection_layer, device,
+            )
         )
 
         matches = None
@@ -978,8 +1043,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--projection-layer",
         type=int,
-        required=True,
-        help="hidden-state layer index for PCT projection (0=embeddings, 20=layer20 output)",
+        default=16,
+        help="hidden-state layer index for PCT projection (0=embeddings, N=layerN output); "
+             "Mistral-7B has 33 states (0..32), default=16 (mid-network)",
     )
 
     # Adapter paths — omit any to skip that expert
@@ -1006,14 +1072,26 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--dtype",  choices=list(_DTYPE_MAP), default="bfloat16")
     p.add_argument("--append", action="store_true", default=False,
-                   help="append to existing output JSONL files instead of overwriting")
+                   help="append to existing output JSONL files instead of overwriting; "
+                        "summaries will include all records (old + new), so use with care")
+    p.add_argument("--dry-run", action="store_true", default=False,
+                   help="skip model/vector loading and use stub outputs — validates the full "
+                        "pipeline (data loading, loops, file writing) without a GPU")
 
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    log.info("starting evaluation — methods=%s  limit=%s", args.run_methods, args.limit)
+    if args.dry_run:
+        log.info("DRY-RUN mode — model/vector loading skipped; outputs use stub coordinates")
+    elif not _HAS_TORCH:
+        raise SystemExit(
+            "[error] torch/transformers/peft are not installed — cannot run without --dry-run.\n"
+            "        Install dependencies or add --dry-run to validate the pipeline locally."
+        )
+    log.info("starting evaluation — methods=%s  limit=%s  dry_run=%s",
+             args.run_methods, args.limit, args.dry_run)
 
     # ── validate input paths ──────────────────────────────────────────────────
     for attr, label in [
@@ -1065,13 +1143,17 @@ def main() -> None:
 
     # ── load steering vectors ─────────────────────────────────────────────────
     dtype = _DTYPE_MAP[args.dtype]
-    log.info("loading steering vectors")
-    econ_vector   = load_steering_vector(args.econ_vector_path,   args.device, dtype)
-    social_vector = load_steering_vector(args.social_vector_path, args.device, dtype)
-    log.info(
-        "econ_vector shape=%s  social_vector shape=%s",
-        econ_vector.shape, social_vector.shape,
-    )
+    if args.dry_run:
+        log.info("DRY-RUN: skipping steering vector load")
+        econ_vector = social_vector = None
+    else:
+        log.info("loading steering vectors")
+        econ_vector   = load_steering_vector(args.econ_vector_path,   args.device, dtype)
+        social_vector = load_steering_vector(args.social_vector_path, args.device, dtype)
+        log.info(
+            "econ_vector shape=%s  social_vector shape=%s",
+            econ_vector.shape, social_vector.shape,
+        )
 
     # ── output setup ──────────────────────────────────────────────────────────
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -1084,6 +1166,14 @@ def main() -> None:
         for out_p in [m1_path, m2_path, m3_path]:
             out_p.write_text("", encoding="utf-8")
         log.info("cleared output JSONL files (pass --append to resume)")
+    else:
+        non_empty = [p for p in [m1_path, m2_path, m3_path] if p.exists() and p.stat().st_size > 0]
+        if non_empty:
+            log.warning(
+                "--append: %d output file(s) already contain records; summaries will "
+                "aggregate all existing + new records — use without --append to start fresh",
+                len(non_empty),
+            )
 
     gen_config = GenerationConfig(
         max_new_tokens=args.max_new_tokens,
@@ -1147,15 +1237,20 @@ def main() -> None:
         log.info("condition: %s  adapter: %s", condition.name, condition.adapter_path)
         log.info("=" * 60)
 
-        model, tokenizer = load_model_and_tokenizer(
-            args.model_name, condition.adapter_path, dtype, args.device
-        )
+        if args.dry_run:
+            model, tokenizer = None, None
+            log.info("DRY-RUN: skipping model load — condition: %s", condition.name)
+        else:
+            model, tokenizer = load_model_and_tokenizer(
+                args.model_name, condition.adapter_path, dtype, args.device
+            )
 
         if "method1" in args.run_methods:
             m1_recs = run_method1(
                 model, tokenizer, condition, statements,
                 econ_vector, social_vector, args.projection_layer,
                 gen_config, m1_path, args.limit, args.device,
+                dry_run=args.dry_run,
             )
             all_m1_records.extend(m1_recs)
 
@@ -1164,6 +1259,7 @@ def main() -> None:
                 model, tokenizer, condition, statements, personas,
                 econ_vector, social_vector, args.projection_layer,
                 gen_config, m2_path, all_m1_records, args.limit, args.device, warnings,
+                dry_run=args.dry_run,
             )
 
         if "method3" in args.run_methods:
@@ -1171,12 +1267,14 @@ def main() -> None:
                 model, tokenizer, condition, questions,
                 econ_vector, social_vector, args.projection_layer,
                 m3_path, args.limit, args.device, warnings,
+                dry_run=args.dry_run,
             )
 
-        log.info("unloading model for condition: %s", condition.name)
-        del model, tokenizer
-        if args.device == "cuda":
-            torch.cuda.empty_cache()
+        if not args.dry_run:
+            log.info("unloading model for condition: %s", condition.name)
+            del model, tokenizer
+            if args.device == "cuda":
+                torch.cuda.empty_cache()
 
     # ── compute and write summaries ───────────────────────────────────────────
     log.info("computing summaries")

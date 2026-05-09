@@ -334,36 +334,6 @@ validate_expert_datasets:
     # Minimum number of chunks required in each output split.
     min_split_size: 15
 
-# validate_expert_datasets:
-#   # viable_topics: [economy, foreign_policy, health_education, governance_institutions]
-#   viable_topics: [economy, foreign_policy, law_order, health_education, governance_institutions]
-#   held_out_topic: immigration
-#   target_n_per_quadrant: 800
-#   source_cap_pct: 0.25
-#   min_cell_size: 25
-#   length_filter:
-#     min_tokens: 50
-#     max_tokens: 700
-#   held_out_sources:              # one source per quadrant held out as val_source
-#     right_auth: uk_press
-#     left_auth:  uk_press
-#     left_lib:   ire_press
-#     right_lib:  uk_press
-#   val_pct: 0.15                  # fraction of sampled chunks split to val_indist (doc-level)
-#   random_seed: 42
-#   dedupe:
-#     enabled: true
-#     min_chunk_index_gap: 2       # min gap between chunk indices within the same document
-#   confidence_bins:
-#     n_bins: 3
-#     edges: [0.005, 0.010, 0.018, 1.0]  # bin edges; first = retention threshold
-#   sanity_checks:
-#     max_source_pct_train: 0.70          # slightly looser than cap to allow rounding slack
-#     max_topic_kl_divergence: 8.0
-#     max_length_ratio: 1.30              # longest / shortest mean n_tokens across quadrants
-#     max_conf_margin_ratio: 2.5          # longest / shortest mean conf_margin across quadrants
-#     min_split_size: 15                  # min chunks per output split (< min_cell_size; handles left_auth edge case)
-
 
 # === 07 TRAIN EXPERTS ===
 

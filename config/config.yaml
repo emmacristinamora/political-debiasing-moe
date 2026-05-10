@@ -399,10 +399,10 @@ router_calibration:
       economic_vector_path: data/steering-vectors/vectors/economic_vectors.pt
       social_vector_path: data/steering-vectors/vectors/social_vectors.pt
     expert_checkpoints:
-      left_lib_checkpoint: data/experts/training-outputs/left_lib/seed_42/best
-      left_auth_checkpoint: data/experts/training-outputs/left_auth/seed_42/best
-      right_lib_checkpoint: data/experts/training-outputs/right_lib/seed_42/best
-      right_auth_checkpoint: data/experts/training-outputs/right_auth/seed_42/best
+      left_lib_checkpoint: data/experts/final-experts/left_lib
+      left_auth_checkpoint: data/experts/final-experts/left_auth
+      right_lib_checkpoint: data/experts/final-experts/right_lib
+      right_auth_checkpoint: data/experts/final-experts/right_auth
     output_dir: data/router
     prompts_path: data/router/prompts.jsonl
     features_path: data/router/features.jsonl

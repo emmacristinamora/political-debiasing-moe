@@ -266,14 +266,24 @@ class ExpertOutput:
     Unified representation of a single expert response.
 
     Contains:
-    - expert name
-    - hidden-state output for editor-side fusion
-    - optional decoded text for logging or fallback synthesis
+    - expert_name: which quadrant produced this output
+    - hidden_output: prompt-time hidden state SEQUENCE at the projection layer
+      (= InputTransformer.ENCODING_LAYER, layer 20). Shape [seq_len, hidden_dim],
+      not pooled, not L2-normalized. The Editor mixes this per-token across
+      experts, then mean-pools the mixed sequence before projecting onto
+      steering vectors for alignment scoring.
+    - final_hidden_state: prompt-time hidden state at the FINAL transformer
+      layer for the LAST prompt position only. Shape [hidden_dim]. Used as
+      the seed for decoding: mixing this vector across experts by alpha gives
+      the LM head its input for the first generated token.
+    - decoded_text: optional decoded text. None in the dense-mixing pipeline;
+      decoding is owned by MoCEEngine.run, not by per-expert generation.
     - metadata for debugging
     """
 
     expert_name: str
     hidden_output: Any | None = None
+    final_hidden_state: Any | None = None
     decoded_text: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -2185,6 +2195,14 @@ class ExpertManager:
     - this component does not decide expert weights
     - all four experts should be available to the editor in dense mode
     - expert identities and iteration order follow CANONICAL_QUADRANT_ORDER
+
+    Adapter strategy:
+    - one shared base model is wrapped with peft.PeftModel; all four LoRA
+      adapters are loaded onto the same wrapper and selected per-expert via
+      model.set_adapter(name). adapters are kept DISABLED at rest so other
+      components (InputTransformer, Editor) keep seeing pristine base-model
+      behavior; run_single_expert temporarily enables the relevant adapter,
+      runs a single no-grad forward pass, then disables again.
     """
 
     def __init__(
@@ -2194,8 +2212,41 @@ class ExpertManager:
         expert_config: ExpertConfig,
         generation_config: GenerationConfig,
     ) -> None:
-        # store shared model/tokenizer references and load expert checkpoints
-        raise NotImplementedError
+        if model is None:
+            raise ValueError("model must not be None")
+        if tokenizer is None:
+            raise ValueError("tokenizer must not be None")
+        if not isinstance(expert_config, ExpertConfig):
+            raise ValueError(
+                "expert_config must be an ExpertConfig, "
+                f"got {type(expert_config).__name__}"
+            )
+        if not isinstance(generation_config, GenerationConfig):
+            raise ValueError(
+                "generation_config must be a GenerationConfig, "
+                f"got {type(generation_config).__name__}"
+            )
+
+        self.model = model
+        self.tokenizer = tokenizer
+        self.expert_config = expert_config
+        self.generation_config = generation_config
+
+        # populated by load_experts(); declared up-front so the attribute
+        # set is stable even if load_experts raises
+        self.adapter_names: tuple[str, ...] = CANONICAL_QUADRANT_ORDER
+        self.adapters_loaded: bool = False
+
+        # per-expert KV caches kept across run_single_expert and the
+        # autoregressive step API used by MoCEEngine.decode. Each prefill
+        # overwrites the previous prompt's cache; a step call reads and
+        # writes the entry for its expert. Initialized empty up-front so
+        # the attribute is always present, even before the first prefill.
+        self._expert_kv_caches: dict[str, Any] = {}
+
+        # fail-early: missing checkpoints, peft import errors, or shape
+        # mismatches surface here, not on the first run_all_experts call
+        self.load_experts()
 
     def load_experts(self) -> None:
         """
@@ -2206,8 +2257,51 @@ class ExpertManager:
         - left_auth
         - right_lib
         - right_auth
+
+        Strategy:
+        - the first quadrant wraps self.model with PeftModel.from_pretrained,
+          rebinding self.model to the wrapper; the remaining three are added
+          via self.model.load_adapter. After all four are loaded, every
+          adapter is disabled so subsequent base-model forward passes
+          (InputTransformer, Editor) behave as if peft were not attached.
         """
-        raise NotImplementedError
+        # peft is a project dep (see requirements.txt) but kept as a local
+        # import so test environments without a real model never fall through
+        # this path
+        from peft import PeftModel
+
+        checkpoint_paths: dict[str, Path] = {
+            "left_lib":   Path(self.expert_config.left_lib_checkpoint),
+            "left_auth":  Path(self.expert_config.left_auth_checkpoint),
+            "right_lib":  Path(self.expert_config.right_lib_checkpoint),
+            "right_auth": Path(self.expert_config.right_auth_checkpoint),
+        }
+
+        for quadrant in CANONICAL_QUADRANT_ORDER:
+            path = checkpoint_paths[quadrant]
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"expert checkpoint for {quadrant!r} not found: {path}"
+                )
+
+        first_quadrant = CANONICAL_QUADRANT_ORDER[0]
+        self.model = PeftModel.from_pretrained(
+            self.model,
+            str(checkpoint_paths[first_quadrant]),
+            adapter_name=first_quadrant,
+        )
+        for quadrant in CANONICAL_QUADRANT_ORDER[1:]:
+            self.model.load_adapter(
+                str(checkpoint_paths[quadrant]),
+                adapter_name=quadrant,
+            )
+
+        # leave adapters disabled at rest; run_single_expert flips the
+        # relevant one on for the duration of its forward pass
+        self.model.disable_adapter_layers()
+        if hasattr(self.model, "eval"):
+            self.model.eval()
+        self.adapters_loaded = True
 
     def run_single_expert(
         self,
@@ -2216,13 +2310,196 @@ class ExpertManager:
         prompt_state: PromptState,
     ) -> ExpertOutput:
         """
-        Execute one expert on the current prompt.
+        Execute one expert on the prompt and return both the layer-20 sequence
+        (for editor-side mixing + alignment scoring) and the final-layer last-
+        position hidden state (the seed for decoding).
 
-        Returns:
-        - hidden-state output for editor-side fusion
-        - optional decoded candidate text for logging or fallback synthesis
+        Returns ExpertOutput with:
+        - hidden_output: rank-2 float32 tensor of shape [seq_len, hidden_dim]
+          — the layer-InputTransformer.ENCODING_LAYER (= 20) sequence over
+          the full prompt, not pooled and not L2-normalized. The Editor
+          mixes per-token across experts and pools after mixing.
+        - final_hidden_state: rank-1 float32 tensor of shape [hidden_dim]
+          — the FINAL transformer layer's hidden state at the LAST prompt
+          position. Mixed across experts by the editor's final alpha to
+          seed the LM head for the first generated token.
+        - decoded_text: None (decoding is owned by MoCEEngine.run).
+
+        Side effect:
+        - the expert's KV cache (transformers DynamicCache or equivalent) is
+          stored in self._expert_kv_caches[expert_name]. The autoregressive
+          step API in MoCEEngine.decode picks it up from there.
+
+        Adapter handling:
+        - set_adapter(expert_name) selects the LoRA, enable_adapter_layers()
+          activates it, the no-grad forward runs, then disable_adapter_layers()
+          restores pristine base-model behavior for the next caller.
+
+        Raises:
+        - ValueError naming the violated condition; never silently coerces
+          inputs or model outputs
         """
-        raise NotImplementedError
+        if not self.adapters_loaded:
+            raise ValueError(
+                "ExpertManager.load_experts must run before run_single_expert"
+            )
+        if expert_name not in CANONICAL_QUADRANT_ORDER:
+            raise ValueError(
+                f"expert_name must be one of {list(CANONICAL_QUADRANT_ORDER)}; "
+                f"got {expert_name!r}"
+            )
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            raise ValueError("prompt_text must be a non-empty string")
+        if not isinstance(prompt_state, PromptState):
+            raise ValueError(
+                "prompt_state must be a PromptState, "
+                f"got {type(prompt_state).__name__}"
+            )
+
+        encoding_layer = InputTransformer.ENCODING_LAYER
+        max_length = InputTransformer.DEFAULT_MAX_LENGTH
+
+        tokens = self.tokenizer(
+            prompt_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+        )
+        for required_key in ("input_ids", "attention_mask"):
+            if required_key not in tokens:
+                raise ValueError(
+                    f"tokenizer output is missing required key {required_key!r}"
+                )
+
+        try:
+            model_device = next(self.model.parameters()).device
+        except (AttributeError, StopIteration):
+            model_device = None
+        if model_device is not None:
+            tokens = {
+                key: value.to(model_device) if isinstance(value, torch.Tensor) else value
+                for key, value in tokens.items()
+            }
+        attention_mask = tokens["attention_mask"]
+        if int(attention_mask.sum().item()) == 0:
+            raise ValueError(
+                "tokenizer 'attention_mask' contains no non-padding tokens"
+            )
+
+        self.model.set_adapter(expert_name)
+        self.model.enable_adapter_layers()
+        try:
+            with torch.no_grad():
+                outputs = self.model(
+                    **tokens,
+                    output_hidden_states=True,
+                    use_cache=True,
+                )
+        finally:
+            # always restore pristine base-model behavior for downstream
+            # callers (InputTransformer / Editor scoring), even on error
+            self.model.disable_adapter_layers()
+
+        if not hasattr(outputs, "hidden_states") or outputs.hidden_states is None:
+            raise ValueError(
+                f"expert {expert_name!r}: model output is missing hidden_states"
+            )
+        hidden_states = outputs.hidden_states
+        if not isinstance(hidden_states, (list, tuple)):
+            raise ValueError(
+                f"expert {expert_name!r}: hidden_states must be list/tuple, "
+                f"got {type(hidden_states).__name__}"
+            )
+        if len(hidden_states) <= encoding_layer:
+            raise ValueError(
+                f"expert {expert_name!r}: model produced {len(hidden_states)} "
+                f"hidden_states; layer {encoding_layer} is out of range"
+            )
+
+        # --- layer-20 sequence: the editor-mixing input ---
+        layer_20 = hidden_states[encoding_layer]
+        if not isinstance(layer_20, torch.Tensor):
+            raise ValueError(
+                f"expert {expert_name!r}: hidden_states[{encoding_layer}] "
+                f"must be torch.Tensor, got {type(layer_20).__name__}"
+            )
+        if layer_20.dim() != 3 or layer_20.shape[0] != 1:
+            raise ValueError(
+                f"expert {expert_name!r}: hidden_states[{encoding_layer}] "
+                f"must be rank-3 with batch 1; got shape {tuple(layer_20.shape)}"
+            )
+        if layer_20.shape[1] != attention_mask.shape[1]:
+            raise ValueError(
+                f"expert {expert_name!r}: hidden_states[{encoding_layer}] "
+                f"seq_len {layer_20.shape[1]} does not match attention_mask "
+                f"seq_len {attention_mask.shape[1]}"
+            )
+
+        layer_20_seq = layer_20.squeeze(0).detach().to(dtype=torch.float32)
+        if layer_20_seq.dim() != 2:
+            raise ValueError(
+                f"expert {expert_name!r}: layer-{encoding_layer} sequence must "
+                f"be rank 2 after squeeze; got shape {tuple(layer_20_seq.shape)}"
+            )
+        if not torch.isfinite(layer_20_seq).all().item():
+            raise ValueError(
+                f"expert {expert_name!r}: layer-{encoding_layer} sequence has "
+                "NaN or inf entries"
+            )
+
+        # --- final-layer last position: the decode seed ---
+        final_layer = hidden_states[-1]
+        if not isinstance(final_layer, torch.Tensor):
+            raise ValueError(
+                f"expert {expert_name!r}: final hidden_states must be "
+                f"torch.Tensor, got {type(final_layer).__name__}"
+            )
+        if final_layer.dim() != 3 or final_layer.shape[0] != 1:
+            raise ValueError(
+                f"expert {expert_name!r}: final hidden_states must be rank-3 "
+                f"with batch 1; got shape {tuple(final_layer.shape)}"
+            )
+        if final_layer.shape[1] != attention_mask.shape[1]:
+            raise ValueError(
+                f"expert {expert_name!r}: final hidden_states seq_len "
+                f"{final_layer.shape[1]} does not match attention_mask "
+                f"seq_len {attention_mask.shape[1]}"
+            )
+
+        final_last = final_layer[0, -1, :].detach().to(dtype=torch.float32)
+        if final_last.dim() != 1:
+            raise ValueError(
+                f"expert {expert_name!r}: final last-position hidden state "
+                f"must be rank 1; got shape {tuple(final_last.shape)}"
+            )
+        if not torch.isfinite(final_last).all().item():
+            raise ValueError(
+                f"expert {expert_name!r}: final last-position hidden state "
+                "has NaN or inf entries"
+            )
+
+        # --- KV cache: stash for the autoregressive step API ---
+        past_key_values = getattr(outputs, "past_key_values", None)
+        if past_key_values is None:
+            raise ValueError(
+                f"expert {expert_name!r}: model output is missing "
+                "past_key_values; ensure use_cache=True is honored by the "
+                "model wrapper"
+            )
+        self._expert_kv_caches[expert_name] = past_key_values
+
+        return ExpertOutput(
+            expert_name=expert_name,
+            hidden_output=layer_20_seq,
+            final_hidden_state=final_last,
+            decoded_text=None,
+            metadata={
+                "encoding_layer":  encoding_layer,
+                "seq_len":         int(attention_mask.shape[1]),
+                "num_real_tokens": int(attention_mask.sum().item()),
+                "final_layer_index": len(hidden_states) - 1,
+            },
+        )
 
     def run_all_experts(
         self,
@@ -2233,10 +2510,134 @@ class ExpertManager:
         Run all experts in dense mode.
 
         Logic:
-        - preserve per-expert outputs for recursive editing
-        - return a shared structure suitable for aggregation and trace logging
+        - iterate CANONICAL_QUADRANT_ORDER, calling run_single_expert per
+          quadrant
+        - return the dict keyed by quadrant name; downstream Editor
+          validation (Editor._validate_expert_outputs) enforces the
+          canonical-key + identical-shape contract
         """
-        raise NotImplementedError
+        return {
+            quadrant: self.run_single_expert(quadrant, prompt_text, prompt_state)
+            for quadrant in CANONICAL_QUADRANT_ORDER
+        }
+
+    def step_all_experts_one_token(self, token_id: int) -> dict[str, torch.Tensor]:
+        """
+        Advance every expert's autoregressive state by one token and return
+        each expert's final-layer hidden state at the new position.
+
+        Inputs:
+        - token_id: the next token to append. Must be a Python int (typically
+          sampled from the alpha-mixed logits in MoCEEngine.decode).
+
+        Returns:
+        - dict keyed by CANONICAL_QUADRANT_ORDER. Each value is a rank-1
+          float32 tensor of shape [hidden_dim]: the new position's final-
+          layer hidden state under that expert's adapter.
+
+        Side effect:
+        - self._expert_kv_caches[expert_name] is updated in place for every
+          quadrant. The next call sees the extended cache.
+
+        Preconditions:
+        - run_all_experts (or run_single_expert for each quadrant) must have
+          run first to populate the per-expert KV caches.
+        - adapters_loaded must be True.
+
+        Raises:
+        - ValueError naming the violated condition.
+        """
+        if not self.adapters_loaded:
+            raise ValueError(
+                "ExpertManager.load_experts must run before "
+                "step_all_experts_one_token"
+            )
+        if isinstance(token_id, bool) or not isinstance(token_id, int):
+            raise ValueError(
+                f"token_id must be a Python int, got {type(token_id).__name__}"
+            )
+        for quadrant in CANONICAL_QUADRANT_ORDER:
+            if self._expert_kv_caches.get(quadrant) is None:
+                raise ValueError(
+                    f"step_all_experts_one_token: KV cache for {quadrant!r} "
+                    "is absent; run_all_experts must run first to prefill it"
+                )
+
+        try:
+            model_device = next(self.model.parameters()).device
+        except (AttributeError, StopIteration):
+            model_device = None
+
+        input_ids = torch.tensor([[token_id]], dtype=torch.long)
+        if model_device is not None:
+            input_ids = input_ids.to(model_device)
+
+        out: dict[str, torch.Tensor] = {}
+        for quadrant in CANONICAL_QUADRANT_ORDER:
+            self.model.set_adapter(quadrant)
+            self.model.enable_adapter_layers()
+            try:
+                with torch.no_grad():
+                    outputs = self.model(
+                        input_ids=input_ids,
+                        past_key_values=self._expert_kv_caches[quadrant],
+                        use_cache=True,
+                        output_hidden_states=True,
+                    )
+            finally:
+                self.model.disable_adapter_layers()
+
+            new_cache = getattr(outputs, "past_key_values", None)
+            if new_cache is None:
+                raise ValueError(
+                    f"expert {quadrant!r}: model output is missing "
+                    "past_key_values after step; ensure use_cache=True is "
+                    "honored"
+                )
+            self._expert_kv_caches[quadrant] = new_cache
+
+            if not hasattr(outputs, "hidden_states") or outputs.hidden_states is None:
+                raise ValueError(
+                    f"expert {quadrant!r}: model output is missing "
+                    "hidden_states after step"
+                )
+            final_layer = outputs.hidden_states[-1]
+            if (
+                not isinstance(final_layer, torch.Tensor)
+                or final_layer.dim() != 3
+                or final_layer.shape[0] != 1
+                or final_layer.shape[1] != 1
+            ):
+                shape_repr = (
+                    tuple(final_layer.shape)
+                    if isinstance(final_layer, torch.Tensor)
+                    else type(final_layer).__name__
+                )
+                raise ValueError(
+                    f"expert {quadrant!r}: stepped final hidden_states must "
+                    f"be rank-3 with shape [1, 1, hidden_dim]; got {shape_repr}"
+                )
+
+            vec = final_layer[0, 0, :].detach().to(dtype=torch.float32)
+            if not torch.isfinite(vec).all().item():
+                raise ValueError(
+                    f"expert {quadrant!r}: stepped final hidden state has "
+                    "NaN or inf"
+                )
+            out[quadrant] = vec
+
+        return out
+
+    def reset_decode_state(self) -> None:
+        """
+        Drop all cached per-expert KV state.
+
+        Called by MoCEEngine.decode after generation completes (or on error)
+        so the next prompt does not pick up stale cache entries. The caches
+        hold prompt-conditioned attention state and are not transferable
+        across prompts.
+        """
+        self._expert_kv_caches.clear()
 
 
 # === EDITOR ===
@@ -2503,15 +2904,19 @@ class Editor:
         Requirements:
         - keys match CANONICAL_QUADRANT_ORDER exactly
         - each value is an ExpertOutput
-        - each ExpertOutput.hidden_output is a non-None torch.Tensor with
-          all entries finite (no NaN, no inf)
+        - each ExpertOutput.hidden_output is a non-None torch.Tensor of rank 2
+          (shape [seq_len, hidden_dim]) with all entries finite (no NaN, no inf)
         - all hidden-state tensors share an identical shape
 
         Notes:
-        - the Editor mixes ExpertOutput.hidden_output. The dataclass field is
-          typed `Any | None = None` for upstream flexibility, but the Editor
-          contract requires a real torch.Tensor here -- None is rejected
-          loudly rather than silently broadening the contract.
+        - the Editor mixes ExpertOutput.hidden_output per token across
+          experts. The rank-2 contract reflects Resolution 1: experts emit
+          full layer-20 sequences over the prompt rather than pooled summaries,
+          so the editor's mix preserves token-level structure for downstream
+          decoding. Pooling for steering-vector projection happens after
+          mixing, inside score_current_mixture.
+        - the dataclass field is typed `Any | None = None` for upstream
+          flexibility; the Editor contract enforced here is stricter.
 
         Raises:
         - ValueError naming the violated condition
@@ -2536,6 +2941,12 @@ class Editor:
                 raise ValueError(
                     f"expert_outputs[{key!r}].hidden_output must be a torch.Tensor, "
                     f"got {type(hidden_output).__name__}"
+                )
+            if hidden_output.dim() != 2:
+                raise ValueError(
+                    f"expert_outputs[{key!r}].hidden_output must be rank 2 "
+                    f"(shape [seq_len, hidden_dim]); got shape "
+                    f"{tuple(hidden_output.shape)}"
                 )
             if not torch.isfinite(hidden_output).all().item():
                 raise ValueError(
@@ -2659,10 +3070,18 @@ class Editor:
         - mixed = sum_q alpha[q] * expert_outputs[q].hidden_output
           for q in CANONICAL_QUADRANT_ORDER
 
+        Under Resolution 1, hidden_output is a rank-2 layer-20 sequence of
+        shape [seq_len, hidden_dim]. The arithmetic broadcasts naturally,
+        producing a rank-2 mixed sequence of the same shape: per-token
+        weighted average across the four experts. score_current_mixture
+        mean-pools that sequence before projecting onto steering vectors;
+        the per-token structure is preserved here so downstream decoding
+        in MoCEEngine.run can ingest it without re-mixing.
+
         Inputs:
         - expert_outputs: canonical-keyed mapping to ExpertOutput. Validated
-          via _validate_expert_outputs, which already enforces the narrow
-          Editor-side contract: each hidden_output is a non-None torch.Tensor
+          via _validate_expert_outputs, which enforces the Editor-side
+          contract: each hidden_output is a non-None rank-2 torch.Tensor
           with finite entries, and all four tensors share an identical shape.
         - alpha: probability distribution over CANONICAL_QUADRANT_ORDER.
           Validated via _validate_policy_mapping (canonical keys, finite,
@@ -2686,7 +3105,7 @@ class Editor:
 
         Returns:
         - a torch.Tensor in hidden-state space matching the shared shape
-          of the input expert tensors
+          of the input expert tensors (rank 2 under Resolution 1)
 
         Raises:
         - ValueError if expert_outputs fails expert-output validation, or
@@ -2726,6 +3145,10 @@ class Editor:
         Inputs:
         - mixed_hidden_state: the fused hidden state produced by
           _mix_hidden_states. Must be a torch.Tensor with finite entries.
+          Accepts either rank-2 [seq_len, hidden_dim] (the per-token mixed
+          layer-20 sequence in Resolution 1) or rank-1 [hidden_dim] (legacy
+          pooled input). Rank-2 inputs are mean-pooled along the sequence
+          axis before projection.
 
         Output (fresh dict, plain Python floats):
         - "economic_score": float
@@ -2734,14 +3157,16 @@ class Editor:
         - "bias_magnitude": float
 
         Scoring path:
-        - mirrors InputTransformer.transform on a hidden state:
+        - if rank-2: mean-pool along dim=0 to a 1D vector
+        - mirrors InputTransformer.transform on the resulting 1D hidden state:
           maybe-center the representation, compute axis scores,
           compute quadrant scores, derive bias magnitude
         - reuses the Editor's stored InputTransformer (self.input_transformer);
           the Editor does not load steering vectors itself
 
         Validation:
-        - mixed_hidden_state is a torch.Tensor with all-finite entries
+        - mixed_hidden_state is a torch.Tensor of rank 1 or 2 with all-finite
+          entries
         - axis-score output contains numeric, finite economic_score and
           social_score
         - quadrant_scores passes _validate_alignment_mapping (canonical
@@ -2764,13 +3189,32 @@ class Editor:
                 "mixed_hidden_state must be a torch.Tensor, "
                 f"got {type(mixed_hidden_state).__name__}"
             )
+        if mixed_hidden_state.dim() not in (1, 2):
+            raise ValueError(
+                "mixed_hidden_state must be rank 1 or rank 2; got shape "
+                f"{tuple(mixed_hidden_state.shape)}"
+            )
         if not torch.isfinite(mixed_hidden_state).all().item():
             raise ValueError("mixed_hidden_state contains NaN or inf entries")
+
+        # rank-2 inputs (per-token mixed layer-20 sequence)
+        # are mean-pooled along the sequence axis to land in the same 1D
+        # space InputTransformer.encode_prompt produces. No attention mask
+        # is needed: the prompt-encoding pass had no padding (single prompt,
+        # truncation only).
+        if mixed_hidden_state.dim() == 2:
+            if mixed_hidden_state.shape[0] == 0:
+                raise ValueError(
+                    "mixed_hidden_state has empty sequence axis; cannot pool"
+                )
+            pooled = mixed_hidden_state.mean(dim=0)
+        else:
+            pooled = mixed_hidden_state
 
         # mirror the InputTransformer pipeline used to build PromptState:
         # encode is skipped (we already hold a hidden state), then
         # maybe_center -> axis_scores -> quadrant_scores -> bias_magnitude
-        centered = self.input_transformer.maybe_center_representation(mixed_hidden_state)
+        centered = self.input_transformer.maybe_center_representation(pooled)
         axis_scores = self.input_transformer.compute_axis_scores(centered)
         quadrant_scores = self.input_transformer.compute_quadrant_scores(centered)
 
@@ -3244,6 +3688,232 @@ class MoCEEngine:
             generation_config,
         )
 
+    def decode_editor_result(
+        self,
+        prompt_text: str,
+        prompt_state: PromptState,
+        router_state: RouterState,
+        expert_outputs: dict[str, ExpertOutput],
+        editor_result: EditorResult,
+    ) -> str:
+        """
+        Decode under the editor's converged alpha (Resolution 1).
+
+        At each generated position, the four experts' final-layer hidden
+        states are mixed by editor_result.final_alpha into a single seed
+        vector; the LM head turns that vector into logits over the
+        vocabulary; greedy argmax picks the next token; the chosen token
+        is fed to ExpertManager.step_all_experts_one_token to advance
+        every expert's KV cache for the next step. Generation stops on
+        EOS or at GenerationConfig.max_new_tokens.
+
+        Inputs:
+        - prompt_text, prompt_state, router_state: kept in the signature
+          for runner compatibility and downstream logging hooks; not
+          consumed by the decoder itself.
+        - expert_outputs: per-quadrant ExpertOutput dict. The decoder reads
+          expert_outputs[q].final_hidden_state to seed the first generated
+          token; subsequent tokens come from step_all_experts_one_token.
+        - editor_result: read for editor_result.final_alpha. The mixed
+          layer-20 sequence is NOT consumed here; it serves the editor's
+          scoring path, not the decoder.
+
+        Returns:
+        - the decoded answer text (skip_special_tokens=True), guaranteed
+          non-empty. Empty / whitespace-only output is raised loudly.
+
+        Side effects:
+        - per-expert KV caches in ExpertManager are advanced by one token
+          per generated step. reset_decode_state() runs in a finally block
+          so a subsequent prompt never picks up stale caches.
+
+        Raises:
+        - ValueError on any contract violation (alpha shape, expert seed
+          shape, NaN/inf in logits, empty decoded text).
+        """
+        # --- expert_outputs surface checks ---
+        if not isinstance(expert_outputs, dict):
+            raise ValueError(
+                f"expert_outputs must be a dict, got {type(expert_outputs).__name__}"
+            )
+        if set(expert_outputs.keys()) != set(CANONICAL_QUADRANT_ORDER):
+            raise ValueError(
+                f"expert_outputs keys must equal {list(CANONICAL_QUADRANT_ORDER)}; "
+                f"got {sorted(expert_outputs.keys())}"
+            )
+        for q in CANONICAL_QUADRANT_ORDER:
+            out = expert_outputs[q]
+            if not isinstance(out, ExpertOutput):
+                raise ValueError(
+                    f"expert_outputs[{q!r}] must be ExpertOutput, "
+                    f"got {type(out).__name__}"
+                )
+            seed = out.final_hidden_state
+            if seed is None:
+                raise ValueError(
+                    f"expert_outputs[{q!r}].final_hidden_state is None; "
+                    "decode requires per-expert final-layer seeds"
+                )
+            if not isinstance(seed, torch.Tensor):
+                raise ValueError(
+                    f"expert_outputs[{q!r}].final_hidden_state must be a "
+                    f"torch.Tensor, got {type(seed).__name__}"
+                )
+            if seed.dim() != 1:
+                raise ValueError(
+                    f"expert_outputs[{q!r}].final_hidden_state must be rank 1; "
+                    f"got shape {tuple(seed.shape)}"
+                )
+            if not torch.isfinite(seed).all().item():
+                raise ValueError(
+                    f"expert_outputs[{q!r}].final_hidden_state has NaN or inf"
+                )
+
+        # --- editor_result + alpha checks ---
+        if not isinstance(editor_result, EditorResult):
+            raise ValueError(
+                "editor_result must be an EditorResult, "
+                f"got {type(editor_result).__name__}"
+            )
+        alpha = editor_result.final_alpha
+        if not isinstance(alpha, dict):
+            raise ValueError(
+                "editor_result.final_alpha must be a dict, "
+                f"got {type(alpha).__name__}"
+            )
+        if set(alpha.keys()) != set(CANONICAL_QUADRANT_ORDER):
+            raise ValueError(
+                "editor_result.final_alpha keys must equal "
+                f"{list(CANONICAL_QUADRANT_ORDER)}; got {sorted(alpha.keys())}"
+            )
+        alpha_floats: dict[str, float] = {}
+        alpha_total = 0.0
+        for q in CANONICAL_QUADRANT_ORDER:
+            v = alpha[q]
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise ValueError(
+                    f"editor_result.final_alpha[{q!r}] must be int or float; "
+                    f"got {type(v).__name__}"
+                )
+            v_float = float(v)
+            if not math.isfinite(v_float):
+                raise ValueError(
+                    f"editor_result.final_alpha[{q!r}] is not finite: {v}"
+                )
+            alpha_floats[q] = v_float
+            alpha_total += v_float
+        if abs(alpha_total - 1.0) > 1e-6:
+            raise ValueError(
+                f"editor_result.final_alpha sums to {alpha_total}, not 1.0"
+            )
+
+        # --- LM head + dtype ---
+        lm_head = self.expert_manager.model.get_output_embeddings()
+        if lm_head is None:
+            raise ValueError(
+                "expert_manager.model.get_output_embeddings() returned None; "
+                "decode requires an accessible LM head"
+            )
+        try:
+            lm_dtype = next(lm_head.parameters()).dtype
+        except (AttributeError, StopIteration):
+            lm_dtype = torch.float32
+
+        # --- generation budget + EOS ---
+        max_new_tokens = int(self.expert_manager.generation_config.max_new_tokens)
+        if max_new_tokens <= 0:
+            raise ValueError(
+                f"GenerationConfig.max_new_tokens must be > 0; got {max_new_tokens}"
+            )
+        eos_token_id = getattr(self.expert_manager.tokenizer, "eos_token_id", None)
+        if isinstance(eos_token_id, bool) or not isinstance(eos_token_id, (int, type(None))):
+            # tokenizer eos is occasionally a list or a numpy scalar; treat any
+            # non-int/None as "no EOS" rather than guessing
+            eos_token_id = None
+
+        generated: list[int] = []
+
+        try:
+            # --- first generated token: mix the four prefill seeds ---
+            seed_vec: torch.Tensor | None = None
+            for q in CANONICAL_QUADRANT_ORDER:
+                contribution = expert_outputs[q].final_hidden_state * alpha_floats[q]
+                seed_vec = contribution if seed_vec is None else seed_vec + contribution
+
+            next_token = self._decode_seed_to_token_id(seed_vec, lm_head, lm_dtype)
+            generated.append(next_token)
+
+            # --- subsequent tokens: step all experts on the previous token ---
+            if eos_token_id is None or next_token != int(eos_token_id):
+                for _ in range(max_new_tokens - 1):
+                    stepped = self.expert_manager.step_all_experts_one_token(next_token)
+                    seed_vec = None
+                    for q in CANONICAL_QUADRANT_ORDER:
+                        contribution = stepped[q] * alpha_floats[q]
+                        seed_vec = (
+                            contribution if seed_vec is None
+                            else seed_vec + contribution
+                        )
+                    next_token = self._decode_seed_to_token_id(seed_vec, lm_head, lm_dtype)
+                    generated.append(next_token)
+                    if eos_token_id is not None and next_token == int(eos_token_id):
+                        break
+        finally:
+            # release the per-expert KV caches so the next prompt starts clean
+            self.expert_manager.reset_decode_state()
+
+        # --- decode token ids to text ---
+        final_text = self.expert_manager.tokenizer.decode(
+            generated, skip_special_tokens=True,
+        )
+        if not isinstance(final_text, str):
+            raise ValueError(
+                f"tokenizer.decode returned {type(final_text).__name__}, "
+                "expected str"
+            )
+        if not final_text.strip():
+            raise ValueError(
+                "decoder produced an empty string; first generated token may "
+                f"have been EOS, or the LM head emitted only special tokens "
+                f"(generated {len(generated)} token(s))"
+            )
+        return final_text
+
+    def _decode_seed_to_token_id(
+        self,
+        seed_vec: torch.Tensor,
+        lm_head: Any,
+        lm_dtype: torch.dtype,
+    ) -> int:
+        """
+        Apply the LM head to a single mixed seed vector and return the
+        greedy-argmax token id.
+
+        Greedy is deterministic — required for reproducible candidate
+        traces in the router-calibration runner. Argmax is taken in
+        float32 for numerical stability (bfloat16 argmax can tie or
+        skew on near-equal logits).
+        """
+        if not isinstance(seed_vec, torch.Tensor):
+            raise ValueError(
+                f"decode seed must be a torch.Tensor; got {type(seed_vec).__name__}"
+            )
+        if seed_vec.dim() != 1:
+            raise ValueError(
+                f"decode seed must be rank 1; got shape {tuple(seed_vec.shape)}"
+            )
+        seed = seed_vec.to(dtype=lm_dtype)
+        with torch.no_grad():
+            logits = lm_head(seed)
+        if not isinstance(logits, torch.Tensor):
+            raise ValueError(
+                f"LM head returned {type(logits).__name__}, expected torch.Tensor"
+            )
+        logits = logits.to(dtype=torch.float32)
+        if not torch.isfinite(logits).all().item():
+            raise ValueError("LM head produced NaN or inf logits")
+        return int(logits.argmax(dim=-1).item())
+
     def run(self, prompt_text: str) -> MoCEResult:
         """
         Execute the full debiasing pipeline for a single prompt.
@@ -3257,22 +3927,25 @@ class MoCEEngine:
         5. editor_result = self.editor.run_editing_loop(
                                 prompt_text, prompt_state, router_state,
                                 expert_outputs)
-        6. decode editor_result.final_mixed_hidden_state into final_text
+        6. final_text = self.decode_editor_result(...)
         7. package prompt/router/expert/editor intermediates plus final_text
            into a MoCEResult
 
-        Decoding boundary:
-        - the Editor returns hidden-state mixing artifacts only; engine-side
-          decoding from EditorResult.final_mixed_hidden_state into the final
-          generated answer is NOT yet implemented in this file. Step 6 raises
-          NotImplementedError. Steps 1-5 are fully wired and exercise the
-          upstream pipeline before the decode boundary is hit.
+        Decoding:
+        - decode_editor_result mixes the four experts' final-layer hidden
+          states by editor_result.final_alpha at every generated token,
+          applies the LM head, takes the greedy argmax, and feeds the
+          chosen token back into all four experts via
+          ExpertManager.step_all_experts_one_token. Generation stops on
+          EOS or at GenerationConfig.max_new_tokens.
+        - the editor's mixed layer-20 sequence
+          (editor_result.final_mixed_hidden_state) is consumed only by
+          the editor's alignment-scoring loop, not by the decoder.
 
         Raises:
         - ValueError if prompt_text is not a str
-        - NotImplementedError at the decode boundary (step 6)
         - any ValueError propagated from upstream components (InputTransformer,
-          Router, ExpertManager, Editor)
+          Router, ExpertManager, Editor) or from decode_editor_result
         """
         if not isinstance(prompt_text, str):
             raise ValueError(
@@ -3289,16 +3962,24 @@ class MoCEEngine:
             expert_outputs,
         )
 
-        # decoding boundary: orchestration up through the Editor is complete
-        # and editor_result holds the final mixed hidden state plus metadata.
-        # Turning that hidden state back into generated tokens (and assembling
-        # the MoCEResult around the prompt/router/expert/editor intermediates)
-        # is the remaining unimplemented step.
-        raise NotImplementedError(
-            "MoCEEngine orchestration through the Editor is wired and "
-            "produces an EditorResult, but engine-side decoding from "
-            "EditorResult.final_mixed_hidden_state into MoCEResult.final_text "
-            "is not yet implemented. Remaining boundary: turn the mixed "
-            "hidden state back into generated tokens and assemble the "
-            "MoCEResult around the upstream intermediates."
+        final_text = self.decode_editor_result(
+            prompt_text,
+            prompt_state,
+            router_state,
+            expert_outputs,
+            editor_result,
+        )
+
+        return MoCEResult(
+            prompt_text=prompt_text,
+            prompt_state=prompt_state,
+            router_state=router_state,
+            expert_outputs=expert_outputs,
+            editor_result=editor_result,
+            final_text=final_text,
+            metadata={
+                "decode_callable": "decode_editor_result",
+                "num_edit_steps":  int(editor_result.num_steps_run),
+                "stopped_early":   bool(editor_result.stopped_early),
+            },
         )

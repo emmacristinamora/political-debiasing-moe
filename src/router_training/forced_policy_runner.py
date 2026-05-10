@@ -5,11 +5,15 @@
 
 from __future__ import annotations
 
+import argparse
 import copy
 import importlib.util
+import json
+import logging
 import math
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -113,6 +117,26 @@ DECODE_FALLBACKS: tuple[str, ...] = (
     "decode_final_text",
     "_decode_editor_result",
 )
+
+# CLI driver constants
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+FALLBACK_FEATURES_PATH: Path = Path("data/router/features.jsonl")
+FALLBACK_HIDDEN_PATH:   Path = Path("data/router/hidden.pt")
+FALLBACK_OUTPUT_PATH:   Path = Path("data/router/candidate_traces.jsonl")
+FALLBACK_REPORT_PATH:   Path = Path("data/router/reports/forced_policy_run_report.json")
+
+REQUIRED_FEATURE_KEYS: tuple[str, ...] = (
+    "example_id", "prompt_text", "quadrant_scores", "hidden_representation_ref",
+)
+LOG_PROGRESS_EVERY: int = 50
+
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    level=logging.INFO,
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
 
 
 # === RESULT DATACLASS ===
@@ -419,3 +443,657 @@ def serialize_forced_policy_result(
         "final_text":      result.final_text,
         "metadata":        metadata,
     }
+
+
+# === CLI: ARGUMENT PARSING ===
+
+def parse_args() -> argparse.Namespace:
+    """
+    Parse CLI args for the forced-policy candidate-trace collector.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            "Forced-policy MoCE runner: for each prompt in features.jsonl "
+            "and each generated candidate policy, force the editor's alpha "
+            "to that policy, decode under Resolution 1, and append a row "
+            "to candidate_traces.jsonl."
+        ),
+    )
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--features-path", type=Path, default=None)
+    parser.add_argument("--hidden-path",   type=Path, default=None)
+    parser.add_argument("--output-path",   type=Path, default=None)
+    parser.add_argument("--report-path",   type=Path, default=None)
+    parser.add_argument("--device",        type=str,  default=None)
+    parser.add_argument("--max-examples",  type=int,  default=None)
+    parser.add_argument("--start-index",   type=int,  default=None)
+    parser.add_argument("--end-index",     type=int,  default=None)
+    parser.add_argument("--dry-run",       action="store_true")
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Truncate the output file at startup instead of resuming.",
+    )
+    return parser.parse_args()
+
+
+# === CLI: PATH RESOLUTION ===
+
+def _resolve_path(
+    *,
+    cli_value: Path | None,
+    cfg_value: Any,
+    fallback: Path,
+) -> Path:
+    """CLI override > config field > project-relative fallback."""
+    if cli_value is not None:
+        return Path(cli_value)
+    if cfg_value is not None:
+        return Path(cfg_value)
+    return PROJECT_ROOT / fallback
+
+
+def resolve_paths(cfg: Any, args: argparse.Namespace) -> dict[str, Path]:
+    """
+    Resolve every path the CLI driver needs.
+
+    Precedence per path: CLI override > router_calibration.paths field >
+    project-relative fallback. The report path defaults to
+    <reports_dir>/forced_policy_run_report.json when reports_dir is set
+    on the config; otherwise FALLBACK_REPORT_PATH.
+    """
+    paths_cfg = getattr(cfg, "paths", None)
+
+    cfg_features = getattr(paths_cfg, "features_path", None) if paths_cfg is not None else None
+    cfg_hidden   = getattr(paths_cfg, "hidden_path",   None) if paths_cfg is not None else None
+    cfg_output   = getattr(paths_cfg, "candidate_traces_path", None) if paths_cfg is not None else None
+    cfg_reports_dir = getattr(paths_cfg, "reports_dir", None) if paths_cfg is not None else None
+
+    if args.report_path is not None:
+        report_path = Path(args.report_path)
+    elif cfg_reports_dir is not None:
+        report_path = Path(cfg_reports_dir) / "forced_policy_run_report.json"
+    else:
+        report_path = PROJECT_ROOT / FALLBACK_REPORT_PATH
+
+    return {
+        "features_path": _resolve_path(
+            cli_value=args.features_path, cfg_value=cfg_features,
+            fallback=FALLBACK_FEATURES_PATH,
+        ),
+        "hidden_path": _resolve_path(
+            cli_value=args.hidden_path, cfg_value=cfg_hidden,
+            fallback=FALLBACK_HIDDEN_PATH,
+        ),
+        "output_path": _resolve_path(
+            cli_value=args.output_path, cfg_value=cfg_output,
+            fallback=FALLBACK_OUTPUT_PATH,
+        ),
+        "report_path": Path(report_path),
+    }
+
+
+# === CLI: FEATURE LOADING ===
+
+def load_feature_records(
+    path: Path,
+    *,
+    start_index: int | None,
+    end_index: int | None,
+    max_examples: int | None,
+) -> list[dict[str, Any]]:
+    """
+    Load and validate features.jsonl. Slicing is applied in this order:
+    [start_index:end_index], then [:max_examples] on the slice. Each row
+    is required to carry REQUIRED_FEATURE_KEYS — schema mismatches surface
+    here, not deep inside the run loop.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"features file not found: {path}")
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for line_index, raw_line in enumerate(fh):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as err:
+                raise ValueError(
+                    f"features.jsonl line {line_index + 1}: invalid JSON ({err})"
+                ) from err
+            if not isinstance(row, dict):
+                raise ValueError(
+                    f"features.jsonl line {line_index + 1}: row must be a JSON "
+                    f"object, got {type(row).__name__}"
+                )
+            for key in REQUIRED_FEATURE_KEYS:
+                if key not in row:
+                    raise ValueError(
+                        f"features.jsonl line {line_index + 1}: missing key {key!r}"
+                    )
+            rows.append(row)
+
+    if start_index is not None or end_index is not None:
+        s = 0 if start_index is None else int(start_index)
+        e = len(rows) if end_index is None else int(end_index)
+        if s < 0 or e < 0 or s > e:
+            raise ValueError(
+                f"invalid slice: start_index={start_index} end_index={end_index}"
+            )
+        rows = rows[s:e]
+    if max_examples is not None and max_examples >= 0:
+        rows = rows[: int(max_examples)]
+    return rows
+
+
+# === CLI: HEURISTIC PRIOR ===
+
+def compute_heuristic_prior(
+    quadrant_scores: dict[str, float],
+    *,
+    beta: float,
+    temperature: float,
+) -> dict[str, float]:
+    """
+    softmax(-beta * q / T) over CANONICAL_QUADRANT_ORDER. Mirrors what
+    Router.build_heuristic_prior does in the engine, but operates on a
+    dict so the runner does not need a PromptState to compute it.
+    """
+    if not isinstance(quadrant_scores, dict):
+        raise ValueError(
+            f"quadrant_scores must be a dict, got {type(quadrant_scores).__name__}"
+        )
+    if set(quadrant_scores.keys()) != set(CANONICAL_QUADRANT_ORDER):
+        raise ValueError(
+            "quadrant_scores keys must equal canonical "
+            f"{list(CANONICAL_QUADRANT_ORDER)}; got {sorted(quadrant_scores.keys())}"
+        )
+    if not _is_finite_number(beta):
+        raise ValueError(f"beta must be a finite number; got {beta!r}")
+    if not _is_finite_number(temperature) or float(temperature) == 0.0:
+        raise ValueError(
+            f"temperature must be a finite non-zero number; got {temperature!r}"
+        )
+    for k in CANONICAL_QUADRANT_ORDER:
+        if not _is_finite_number(quadrant_scores[k]):
+            raise ValueError(
+                f"quadrant_scores[{k!r}]={quadrant_scores[k]!r} is not finite"
+            )
+
+    logits = [
+        -float(beta) * float(quadrant_scores[k]) / float(temperature)
+        for k in CANONICAL_QUADRANT_ORDER
+    ]
+    m = max(logits)
+    exps = [math.exp(x - m) for x in logits]
+    z = sum(exps)
+    return {k: e / z for k, e in zip(CANONICAL_QUADRANT_ORDER, exps)}
+
+
+# === CLI: DEVICE / DTYPE RESOLUTION ===
+
+_DTYPE_NAMES: tuple[str, ...] = ("bfloat16", "float16", "float32")
+
+
+def _resolve_device(config_device: str, override_device: str | None) -> str:
+    """CLI override wins over config; final value is just stringified."""
+    chosen = override_device if override_device is not None else config_device
+    if not isinstance(chosen, str) or not chosen.strip():
+        raise ValueError(
+            f"device must be a non-empty string; got config_device={config_device!r} "
+            f"override_device={override_device!r}"
+        )
+    return str(chosen)
+
+
+def _resolve_dtype(dtype_name: str) -> Any:
+    """Map a config string to a torch dtype. torch is imported locally."""
+    if dtype_name not in _DTYPE_NAMES:
+        raise ValueError(
+            f"dtype must be one of {list(_DTYPE_NAMES)}; got {dtype_name!r}"
+        )
+    import torch  # noqa: PLC0415
+    return {
+        "bfloat16": torch.bfloat16,
+        "float16":  torch.float16,
+        "float32":  torch.float32,
+    }[dtype_name]
+
+
+# === CLI: MODEL + ENGINE CONSTRUCTION ===
+
+def load_model_and_tokenizer(
+    base_model_name: str,
+    dtype: Any,
+    device: str,
+) -> tuple[Any, Any]:
+    """
+    Load the base causal LM and its tokenizer, alias pad→eos for Mistral,
+    place the model on the requested device, and set eval mode. Mirrors
+    src/router_training/features.py to keep prefill geometry consistent.
+
+    transformers is imported locally so this module remains importable
+    without it.
+    """
+    from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: PLC0415
+
+    log.info("loading tokenizer: %s", base_model_name)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+    if tokenizer.pad_token is None:
+        # mistral has no pad token; alias to eos without resizing embeddings
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
+
+    log.info(
+        "loading base model: %s  dtype=%s  device=%s",
+        base_model_name, dtype, device,
+    )
+    try:
+        model = AutoModelForCausalLM.from_pretrained(base_model_name, dtype=dtype)
+    except TypeError:
+        # older transformers versions only accept torch_dtype
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model_name, torch_dtype=dtype,
+        )
+    model = model.to(device)
+    model.eval()
+    return model, tokenizer
+
+
+def build_moce_engine(cfg: Any, model: Any, tokenizer: Any) -> Any:
+    """
+    Construct a MoCEEngine wired for forced-policy candidate-trace collection.
+
+    Engine-side config choices baked in here:
+    - RouterConfig.use_calibrated_router=False (the runner forces the policy
+      externally; the engine's router is bypassed by ForcedPolicyMoCERunner).
+    - RouterConfig.beta / temperature = cfg.training.beta / temperature so
+      compute_heuristic_prior and engine.router.build_heuristic_prior agree.
+    - EditorConfig.correction_beta=0.0 so the editor preserves the forced
+      candidate as alpha (no in-loop correction). EditorConfig.max_edit_steps
+      stays at 1 (the dataclass minimum); the step is a pass-through under
+      correction_beta=0.
+
+    The engine module is loaded lazily via importlib so forced_policy_runner
+    remains importable without torch.
+    """
+    components_path = _SRC_DIR / "09_moce_components.py"
+    spec = importlib.util.spec_from_file_location(
+        "moce_components_for_runner_cli", components_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to import {components_path}")
+    moce = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(moce)
+
+    sv_cfg = moce.SteeringVectorConfig(
+        economic_vector_path=Path(cfg.paths.steering_vectors.economic_vector_path),
+        social_vector_path=Path(cfg.paths.steering_vectors.social_vector_path),
+        vector_method=cfg.input_transformer.vector_method,
+        use_final_aggregated_vectors=cfg.input_transformer.use_final_aggregated_vectors,
+        selected_layers=list(cfg.input_transformer.selected_layers),
+        pooling_method=cfg.input_transformer.pooling_method,
+        use_centering=cfg.input_transformer.use_centering,
+        neutral_reference_path=cfg.input_transformer.neutral_reference_path,
+    )
+
+    router_cfg = moce.RouterConfig(
+        use_calibrated_router=False,
+        beta=float(cfg.training.beta),
+        temperature=float(cfg.training.temperature),
+        calibration_input_dim=int(
+            getattr(cfg.input_transformer, "calibration_input_dim", 4096)
+        ),
+    )
+
+    expert_cfg = moce.ExpertConfig(
+        left_lib_checkpoint=Path(cfg.paths.expert_checkpoints.left_lib_checkpoint),
+        left_auth_checkpoint=Path(cfg.paths.expert_checkpoints.left_auth_checkpoint),
+        right_lib_checkpoint=Path(cfg.paths.expert_checkpoints.right_lib_checkpoint),
+        right_auth_checkpoint=Path(cfg.paths.expert_checkpoints.right_auth_checkpoint),
+    )
+
+    editor_cfg = moce.EditorConfig(
+        max_edit_steps=1,
+        correction_beta=0.0,
+        initialization_mode="router_policy",
+    )
+
+    gen_block = getattr(cfg, "generation", None)
+    if gen_block is not None:
+        generation_cfg = moce.GenerationConfig(
+            max_new_tokens=int(getattr(gen_block, "max_new_tokens", 256)),
+            temperature=float(getattr(gen_block, "temperature", 0.7)),
+            do_sample=bool(getattr(gen_block, "do_sample", False)),
+            top_p=float(getattr(gen_block, "top_p", 1.0)),
+        )
+    else:
+        generation_cfg = moce.GenerationConfig()
+
+    return moce.MoCEEngine(
+        model=model,
+        tokenizer=tokenizer,
+        steering_config=sv_cfg,
+        router_config=router_cfg,
+        expert_config=expert_cfg,
+        editor_config=editor_cfg,
+        generation_config=generation_cfg,
+    )
+
+
+# === CLI: RESUME SCAN ===
+
+def scan_completed_pairs(path: Path) -> set[tuple[str, int]]:
+    """
+    Read an existing candidate_traces.jsonl and return the set of
+    (example_id, candidate_index) tuples it already contains. Returns an
+    empty set when the file is absent.
+
+    Rows missing example_id or metadata.candidate_index are skipped with a
+    warning rather than treated as completed; a malformed historical row
+    should not silently mark a pair as done.
+    """
+    if not path.is_file():
+        return set()
+    done: set[tuple[str, int]] = set()
+    with path.open("r", encoding="utf-8") as fh:
+        for line_index, raw_line in enumerate(fh):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                log.warning(
+                    "scan_completed_pairs: skipping malformed JSON at line %d",
+                    line_index + 1,
+                )
+                continue
+            example_id = row.get("example_id")
+            metadata = row.get("metadata") or {}
+            candidate_index = metadata.get("candidate_index")
+            if (
+                not isinstance(example_id, str)
+                or isinstance(candidate_index, bool)
+                or not isinstance(candidate_index, int)
+            ):
+                log.warning(
+                    "scan_completed_pairs: skipping row %d (missing example_id "
+                    "or metadata.candidate_index)", line_index + 1,
+                )
+                continue
+            done.add((example_id, int(candidate_index)))
+    return done
+
+
+# === CLI: RUN COLLECTION ===
+
+_FAILED_PAIRS_REPORT_CAP: int = 1000
+
+
+def _normalize_quadrant_scores(raw: Any, where: str) -> dict[str, float]:
+    """Coerce a feature-row quadrant_scores value into a canonical-keyed dict."""
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"{where}: quadrant_scores must be a dict, got {type(raw).__name__}"
+        )
+    if set(raw.keys()) != set(CANONICAL_QUADRANT_ORDER):
+        raise ValueError(
+            f"{where}: quadrant_scores keys must equal canonical "
+            f"{list(CANONICAL_QUADRANT_ORDER)}; got {sorted(raw.keys())}"
+        )
+    out: dict[str, float] = {}
+    for k in CANONICAL_QUADRANT_ORDER:
+        v = raw[k]
+        if not _is_finite_number(v):
+            raise ValueError(f"{where}: quadrant_scores[{k!r}]={v!r} is not finite")
+        out[k] = float(v)
+    return out
+
+
+def run_collection(args: argparse.Namespace) -> dict[str, Any]:
+    """
+    Drive the forced-policy collection pipeline end-to-end:
+        load config -> resolve paths -> load features -> resume scan ->
+        (dry-run early-exit) -> load model + build engine + runner ->
+        per-prompt: compute prior, generate candidates, run+serialize+write,
+        skipping completed pairs and tolerating per-pair failures ->
+        write a JSON report at the end.
+
+    Returns the report dict. Also persists it under report_path.
+    """
+    # lazy imports — keep the module importable without torch / yaml
+    import random  # noqa: PLC0415
+
+    from router_training.config import load_router_calibration_config  # noqa: E402, PLC0415
+    from router_training.utils import (  # noqa: E402, PLC0415
+        CandidatePolicyConfig,
+        generate_candidate_policies,
+    )
+
+    started_at = datetime.now().isoformat(timespec="seconds")
+
+    cfg = load_router_calibration_config(args.config)
+    paths = resolve_paths(cfg, args)
+
+    features_path: Path = paths["features_path"]
+    output_path:   Path = paths["output_path"]
+    report_path:   Path = paths["report_path"]
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+
+    feature_rows = load_feature_records(
+        features_path,
+        start_index=args.start_index,
+        end_index=args.end_index,
+        max_examples=args.max_examples,
+    )
+    log.info(
+        "loaded %d feature rows from %s (start=%s end=%s max=%s)",
+        len(feature_rows), features_path, args.start_index, args.end_index,
+        args.max_examples,
+    )
+
+    # candidate-policy config — pulled straight from router_calibration.candidate_policies
+    cp = cfg.candidate_policies
+    sharpen = list(getattr(cp, "sharpen_temperatures", []) or [])
+    soften  = list(getattr(cp, "soften_temperatures",  []) or [])
+    candidate_cfg = CandidatePolicyConfig(
+        num_dirichlet_samples=int(cp.dirichlet_samples),
+        dirichlet_alpha=float(cp.dirichlet_concentration),
+        include_uniform=bool(cp.include_uniform),
+        include_sharpened=bool(sharpen),
+        include_softened=bool(soften),
+        include_opposite=bool(cp.include_opposite_heavy),
+        include_adjacent=bool(cp.include_adjacent_heavy),
+        min_probability=float(cp.min_probability),
+    )
+    candidate_seed = int(cp.seed)
+
+    beta = float(cfg.training.beta)
+    temperature = float(cfg.training.temperature)
+
+    # resume scan + truncate-on-no-resume
+    if args.no_resume and output_path.exists():
+        log.info("--no-resume: truncating %s", output_path)
+        output_path.write_text("", encoding="utf-8")
+    completed_pairs = (
+        set() if args.no_resume else scan_completed_pairs(output_path)
+    )
+    log.info("resume: %d completed (example_id, candidate_index) pairs", len(completed_pairs))
+
+    if args.dry_run:
+        log.info("--dry-run: skipping model load and per-prompt execution")
+        return _build_collection_report(
+            cfg=cfg, args=args, paths=paths, beta=beta, temperature=temperature,
+            candidate_cfg=candidate_cfg, candidate_seed=candidate_seed,
+            num_feature_rows=len(feature_rows), completed_count=len(completed_pairs),
+            attempted=0, written=0, resumed=0, failed=[], started_at=started_at,
+            finished_at=datetime.now().isoformat(timespec="seconds"),
+            dry_run=True,
+        )
+
+    # build the engine — heavy lift starts here
+    device = _resolve_device(str(getattr(cfg.model, "device", "cpu")), args.device)
+    dtype = _resolve_dtype(str(getattr(cfg.model, "dtype", "float32")))
+    base_model_name = str(cfg.model.base_model)
+
+    model, tokenizer = load_model_and_tokenizer(base_model_name, dtype, device)
+    engine = build_moce_engine(cfg, model, tokenizer)
+    runner = ForcedPolicyMoCERunner(engine)
+
+    attempted = 0
+    written = 0
+    resumed = 0
+    failed: list[dict[str, Any]] = []
+    failed_overflow = 0
+
+    with output_path.open("a", encoding="utf-8") as out_fh:
+        for prompt_index, feature in enumerate(feature_rows):
+            example_id  = feature["example_id"]
+            prompt_text = feature["prompt_text"]
+            quadrant_scores = _normalize_quadrant_scores(
+                feature["quadrant_scores"], where=f"example_id={example_id}",
+            )
+
+            heuristic_prior = compute_heuristic_prior(
+                quadrant_scores, beta=beta, temperature=temperature,
+            )
+
+            rng = random.Random(candidate_seed + prompt_index)
+            candidates = generate_candidate_policies(
+                quadrant_scores=quadrant_scores,
+                heuristic_prior=heuristic_prior,
+                config=candidate_cfg,
+                rng=rng,
+            )
+
+            for cand_index, candidate in enumerate(candidates):
+                if (example_id, cand_index) in completed_pairs:
+                    resumed += 1
+                    continue
+                attempted += 1
+                try:
+                    result = runner.run(
+                        example_id=example_id,
+                        prompt_text=prompt_text,
+                        candidate_policy=candidate,
+                        heuristic_prior=heuristic_prior,
+                    )
+                    trace = serialize_forced_policy_result(result)
+                    trace_meta = trace.setdefault("metadata", {})
+                    trace_meta["candidate_index"] = int(cand_index)
+                    out_fh.write(json.dumps(trace, ensure_ascii=False) + "\n")
+                    out_fh.flush()
+                    written += 1
+                except (ValueError, RuntimeError) as err:
+                    if len(failed) < _FAILED_PAIRS_REPORT_CAP:
+                        failed.append({
+                            "example_id": example_id,
+                            "candidate_index": int(cand_index),
+                            "error_type": type(err).__name__,
+                            "error_message": str(err),
+                        })
+                    else:
+                        failed_overflow += 1
+                    log.warning(
+                        "pair (example_id=%s, candidate_index=%d) failed: %s: %s",
+                        example_id, cand_index, type(err).__name__, err,
+                    )
+
+            n_done = prompt_index + 1
+            if n_done % LOG_PROGRESS_EVERY == 0 or n_done == len(feature_rows):
+                log.info(
+                    "progress: %d/%d prompts | attempted=%d written=%d resumed=%d failed=%d",
+                    n_done, len(feature_rows), attempted, written, resumed,
+                    len(failed) + failed_overflow,
+                )
+
+    finished_at = datetime.now().isoformat(timespec="seconds")
+    return _build_collection_report(
+        cfg=cfg, args=args, paths=paths, beta=beta, temperature=temperature,
+        candidate_cfg=candidate_cfg, candidate_seed=candidate_seed,
+        num_feature_rows=len(feature_rows), completed_count=len(completed_pairs),
+        attempted=attempted, written=written, resumed=resumed,
+        failed=failed, started_at=started_at, finished_at=finished_at,
+        dry_run=False, failed_overflow=failed_overflow,
+    )
+
+
+def _build_collection_report(
+    *,
+    cfg: Any,
+    args: argparse.Namespace,
+    paths: dict[str, Path],
+    beta: float,
+    temperature: float,
+    candidate_cfg: Any,
+    candidate_seed: int,
+    num_feature_rows: int,
+    completed_count: int,
+    attempted: int,
+    written: int,
+    resumed: int,
+    failed: list[dict[str, Any]],
+    started_at: str,
+    finished_at: str,
+    dry_run: bool,
+    failed_overflow: int = 0,
+) -> dict[str, Any]:
+    """Assemble + persist the run report. Returns the report dict."""
+    report: dict[str, Any] = {
+        "config_path":  str(args.config),
+        "dry_run":      bool(dry_run),
+        "started_at":   started_at,
+        "finished_at":  finished_at,
+        "input_paths": {
+            "features_path": str(paths["features_path"]),
+            "hidden_path":   str(paths["hidden_path"]),
+        },
+        "output_paths": {
+            "candidate_traces": str(paths["output_path"]),
+            "report":           str(paths["report_path"]),
+        },
+        "hyperparameters": {
+            "beta":              beta,
+            "temperature":       temperature,
+            "candidate_seed":    candidate_seed,
+            "candidate_config": {
+                "num_dirichlet_samples": int(candidate_cfg.num_dirichlet_samples),
+                "dirichlet_alpha":       float(candidate_cfg.dirichlet_alpha),
+                "include_uniform":       bool(candidate_cfg.include_uniform),
+                "include_sharpened":     bool(candidate_cfg.include_sharpened),
+                "include_softened":      bool(candidate_cfg.include_softened),
+                "include_opposite":      bool(candidate_cfg.include_opposite),
+                "include_adjacent":      bool(candidate_cfg.include_adjacent),
+                "min_probability":       float(candidate_cfg.min_probability),
+            },
+        },
+        "totals": {
+            "feature_rows_seen":    int(num_feature_rows),
+            "previously_completed": int(completed_count),
+            "pairs_attempted":      int(attempted),
+            "pairs_written":        int(written),
+            "pairs_resumed":        int(resumed),
+            "pairs_failed":         int(len(failed) + failed_overflow),
+        },
+        "failed_pairs":           list(failed),
+        "failed_pairs_overflow":  int(failed_overflow),
+    }
+    paths["report_path"].parent.mkdir(parents=True, exist_ok=True)
+    with paths["report_path"].open("w", encoding="utf-8") as fh:
+        json.dump(report, fh, ensure_ascii=False, indent=2)
+    return report
+
+
+# === CLI: ENTRYPOINT ===
+
+def main() -> None:
+    args = parse_args()
+    run_collection(args)
+
+
+if __name__ == "__main__":
+    main()

@@ -95,7 +95,10 @@ python -u src/08_test_experts.py \
   --adapter-econ-right-libertarian   data/experts/final-experts/right_lib \
   --dtype                            bfloat16 \
   --device                           cuda \
-  --max-new-tokens                   120
+  --max-new-tokens                   120 \
+  --do-sample                         \
+  --temperature                      0.7 \
+  --top-p 0.9
 
 echo ""
 echo "[info] end=$(date)"

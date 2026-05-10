@@ -523,6 +523,8 @@ def run_method1(
     output_path: Path,
     limit: Optional[int],
     device: str,
+    proj_model: Any,
+    proj_tokenizer: AutoTokenizer,
     dry_run: bool = False,
 ) -> list[dict]:
     """
@@ -551,7 +553,7 @@ def run_method1(
             generated = generate_response(model, tokenizer, prompt, gen_config, device)
             proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
             proj      = compute_pct_projection(
-                model, tokenizer, proj_text,
+                proj_model, proj_tokenizer, proj_text,
                 econ_vector, social_vector, projection_layer, device,
             )
 
@@ -604,6 +606,8 @@ def run_method2(
     limit: Optional[int],
     device: str,
     warnings: list[str],
+    proj_model: Any,
+    proj_tokenizer: AutoTokenizer,
     dry_run: bool = False,
 ) -> None:
     """
@@ -673,7 +677,7 @@ def run_method2(
                 generated = generate_response(model, tokenizer, prompt, gen_config, device)
                 proj_text = f"{stmt['text']}\n\nResponse:\n{generated}"
                 proj      = compute_pct_projection(
-                    model, tokenizer, proj_text,
+                    proj_model, proj_tokenizer, proj_text,
                     econ_vector, social_vector, projection_layer, device,
                 )
 
@@ -740,6 +744,8 @@ def run_method3(
     limit: Optional[int],
     device: str,
     warnings: list[str],
+    proj_model: Any,
+    proj_tokenizer: AutoTokenizer,
     dry_run: bool = False,
 ) -> None:
     """
@@ -784,7 +790,7 @@ def run_method3(
             _dry_run_project(q["key"], condition.name)
             if dry_run
             else compute_pct_projection(
-                model, tokenizer, proj_text,
+                proj_model, proj_tokenizer, proj_text,
                 econ_vector, social_vector, projection_layer, device,
             )
         )
@@ -1184,6 +1190,7 @@ def main() -> None:
 
     run_config = {
         "model_name":            args.model_name,
+        "projection_model":      "base (fixed, no adapter)",
         "projection_layer":      args.projection_layer,
         "dtype":                 args.dtype,
         "device":                args.device,
@@ -1209,6 +1216,16 @@ def main() -> None:
         json.dumps(run_config, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     log.info("run config written → %s/run_config.json", args.output_dir)
+
+    # ── load fixed base projection model ─────────────────────────────────────
+    if args.dry_run:
+        proj_model, proj_tokenizer = None, None
+        log.info("DRY-RUN: skipping projection model load")
+    else:
+        log.info("loading fixed base projection model (no adapter)")
+        proj_model, proj_tokenizer = load_model_and_tokenizer(
+            args.model_name, None, dtype, args.device
+        )
 
     warnings:       list[str]  = []
     all_m1_records: list[dict] = []
@@ -1250,6 +1267,7 @@ def main() -> None:
                 model, tokenizer, condition, statements,
                 econ_vector, social_vector, args.projection_layer,
                 gen_config, m1_path, args.limit, args.device,
+                proj_model, proj_tokenizer,
                 dry_run=args.dry_run,
             )
             all_m1_records.extend(m1_recs)
@@ -1259,6 +1277,7 @@ def main() -> None:
                 model, tokenizer, condition, statements, personas,
                 econ_vector, social_vector, args.projection_layer,
                 gen_config, m2_path, all_m1_records, args.limit, args.device, warnings,
+                proj_model, proj_tokenizer,
                 dry_run=args.dry_run,
             )
 
@@ -1267,14 +1286,21 @@ def main() -> None:
                 model, tokenizer, condition, questions,
                 econ_vector, social_vector, args.projection_layer,
                 m3_path, args.limit, args.device, warnings,
+                proj_model, proj_tokenizer,
                 dry_run=args.dry_run,
             )
 
         if not args.dry_run:
-            log.info("unloading model for condition: %s", condition.name)
+            log.info("unloading generation model for condition: %s", condition.name)
             del model, tokenizer
             if args.device == "cuda":
                 torch.cuda.empty_cache()
+
+    if not args.dry_run:
+        log.info("unloading projection model")
+        del proj_model, proj_tokenizer
+        if args.device == "cuda":
+            torch.cuda.empty_cache()
 
     # ── compute and write summaries ───────────────────────────────────────────
     log.info("computing summaries")

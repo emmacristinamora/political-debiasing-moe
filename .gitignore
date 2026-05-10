@@ -12,7 +12,9 @@ __pycache__/
 data/experts/quadrant-pools/
 data/experts/training-outputs/
 data/experts/training-outputs/old/
-data/router/*.jsonl
+data/experts/train-validate/
+data/experts/test-outputs/
+data/router/
 
 # outputs / logs
 outputs/

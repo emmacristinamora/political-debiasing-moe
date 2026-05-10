@@ -445,6 +445,370 @@ def serialize_forced_policy_result(
     }
 
 
+# === PIPELINE MAIN ===
+# Step 3 of the router-calibration pipeline:
+#   python src/router_training/forced_policy_runner.py --config config/config.yaml
+#
+# For each prompt in features.jsonl, builds ~28 candidate policies and generates
+# one text trace per (prompt, policy) using the LoRA expert with the highest
+# weight in that policy (argmax routing, v1). Output is candidate_traces.jsonl
+# in the format consumed by scorer.py.
+#
+# Runtime on H200 (Mistral-7B, 256 tokens, greedy, batch=1):
+#   ~1.5 s/generation → 28 candidates/prompt → ~42 s/prompt
+#   full 33 850 prompts ≈ 394 h  (use --limit for a usable subset)
+#   --limit 500  ≈  6 h   (recommended for initial router training)
+#   --limit 100  ≈  1.2 h (smoke test)
+
+if __name__ == "__main__":
+
+    import argparse as _argparse
+    import json as _json
+    import logging as _logging
+    import math as _math
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    import numpy as _np
+    import torch as _torch
+    from peft import PeftModel as _PeftModel
+    from transformers import AutoModelForCausalLM as _AutoModelForCausalLM
+    from transformers import AutoTokenizer as _AutoTokenizer
+
+    _logging.basicConfig(
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        level=_logging.INFO,
+        datefmt="%H:%M:%S",
+    )
+    _log = _logging.getLogger("forced_policy_runner")
+
+    _src_dir = _Path(__file__).resolve().parents[1]
+    if str(_src_dir) not in _sys.path:
+        _sys.path.insert(0, str(_src_dir))
+    from router_training.config import load_router_calibration_config as _load_cfg  # noqa: E402
+
+    # ── quadrant topology ─────────────────────────────────────────────────────
+    _ORDER: tuple[str, ...] = ("left_lib", "left_auth", "right_lib", "right_auth")
+
+    _OPPOSITE: dict[str, str] = {
+        "left_lib":   "right_auth",
+        "left_auth":  "right_lib",
+        "right_lib":  "left_auth",
+        "right_auth": "left_lib",
+    }
+    _ADJACENT: dict[str, tuple[str, str]] = {
+        "left_lib":   ("left_auth",  "right_lib"),
+        "left_auth":  ("left_lib",   "right_auth"),
+        "right_lib":  ("left_lib",   "right_auth"),
+        "right_auth": ("right_lib",  "left_auth"),
+    }
+
+    # ── policy helpers ────────────────────────────────────────────────────────
+
+    def _softmax_list(logits: list[float]) -> list[float]:
+        m = max(logits)
+        exps = [_math.exp(x - m) for x in logits]
+        s = sum(exps)
+        return [e / s for e in exps]
+
+    def _normalize_dict(d: dict) -> dict:
+        s = sum(d.values())
+        return {k: v / s for k, v in d.items()}
+
+    def _clip_min(d: dict, min_p: float) -> dict:
+        return _normalize_dict({k: max(v, min_p) for k, v in d.items()})
+
+    def _heuristic_prior(quadrant_scores: dict) -> dict:
+        """pi_0 = softmax(-q) — weights experts that oppose the prompt bias."""
+        logits = [-quadrant_scores[k] for k in _ORDER]
+        probs = _softmax_list(logits)
+        return {k: p for k, p in zip(_ORDER, probs)}
+
+    def _temperature_resample(prior: dict, temperature: float) -> dict:
+        """Sharpen (T<1) or soften (T>1) a distribution via log rescaling."""
+        log_probs = [_math.log(max(prior[k], 1e-12)) for k in _ORDER]
+        probs = _softmax_list([lp / temperature for lp in log_probs])
+        return {k: p for k, p in zip(_ORDER, probs)}
+
+    def _opposite_heavy(focal_quadrant: str, heavy: float = 0.70) -> dict:
+        """Put `heavy` weight on opposite(focal_quadrant), share the rest."""
+        opp = _OPPOSITE[focal_quadrant]
+        rest = (1.0 - heavy) / (len(_ORDER) - 1)
+        return {k: (heavy if k == opp else rest) for k in _ORDER}
+
+    def _adjacent_heavy(focal_quadrant: str, each_adj: float = 0.40) -> dict:
+        """Put `each_adj` on each of the two adjacent quadrants, share remainder."""
+        adj = _ADJACENT[focal_quadrant]
+        other = (1.0 - 2 * each_adj) / 2
+        return {k: (each_adj if k in adj else other) for k in _ORDER}
+
+    def _build_candidate_policies(
+        prior: dict,
+        cfg_cand: Any,
+        rng: "_np.random.Generator",
+    ) -> list[dict]:
+        policies: list[dict] = []
+        min_p = float(cfg_cand.min_probability)
+
+        if cfg_cand.include_heuristic_prior:
+            policies.append(_clip_min(prior, min_p))
+
+        if cfg_cand.include_uniform:
+            policies.append({k: 1.0 / len(_ORDER) for k in _ORDER})
+
+        for temp in cfg_cand.sharpen_temperatures:
+            policies.append(_clip_min(_temperature_resample(prior, float(temp)), min_p))
+
+        for temp in cfg_cand.soften_temperatures:
+            policies.append(_clip_min(_temperature_resample(prior, float(temp)), min_p))
+
+        if cfg_cand.include_opposite_heavy:
+            for q in _ORDER:
+                policies.append(_clip_min(_opposite_heavy(q), min_p))
+
+        if cfg_cand.include_adjacent_heavy:
+            for q in _ORDER:
+                policies.append(_clip_min(_adjacent_heavy(q), min_p))
+
+        samples = rng.dirichlet(
+            [float(cfg_cand.dirichlet_concentration)] * len(_ORDER),
+            size=cfg_cand.dirichlet_samples,
+        )
+        for row in samples:
+            policies.append(_clip_min({k: float(v) for k, v in zip(_ORDER, row)}, min_p))
+
+        return policies
+
+    def _argmax_adapter(policy: dict) -> str:
+        return max(policy, key=policy.__getitem__)
+
+    # ── model loading ─────────────────────────────────────────────────────────
+
+    def _load_model_and_adapters(
+        base_model: str,
+        checkpoints: dict,
+        device: str,
+        dtype: "_torch.dtype",
+    ) -> tuple:
+        _log.info("loading tokenizer: %s", base_model)
+        tok = _AutoTokenizer.from_pretrained(base_model)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        tok.padding_side = "right"
+
+        _log.info("loading base model  dtype=%s  device=%s", dtype, device)
+        model = _AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=dtype)
+        model = model.to(device)
+        model.eval()
+
+        names = list(checkpoints.keys())
+        _log.info("loading adapter '%s' from %s", names[0], checkpoints[names[0]])
+        model = _PeftModel.from_pretrained(
+            model, str(checkpoints[names[0]]), adapter_name=names[0],
+        )
+        for name in names[1:]:
+            _log.info("loading adapter '%s' from %s", name, checkpoints[name])
+            model.load_adapter(str(checkpoints[name]), adapter_name=name)
+        model.eval()
+        _log.info("all %d adapters loaded", len(names))
+        return model, tok
+
+    # ── generation ────────────────────────────────────────────────────────────
+
+    def _generate(
+        model: Any,
+        tok: Any,
+        prompt_text: str,
+        adapter_name: str,
+        gen_cfg: Any,
+        device: str,
+    ) -> str:
+        model.set_adapter(adapter_name)
+        inputs = tok(
+            prompt_text, return_tensors="pt", truncation=True, max_length=512,
+        ).to(device)
+        prompt_len = inputs["input_ids"].shape[1]
+        gen_kwargs: dict = {
+            "max_new_tokens": gen_cfg.max_new_tokens,
+            "do_sample":      gen_cfg.do_sample,
+            "pad_token_id":   tok.eos_token_id,
+        }
+        if gen_cfg.do_sample:
+            gen_kwargs["temperature"] = gen_cfg.temperature
+            gen_kwargs["top_p"]       = gen_cfg.top_p
+        with _torch.inference_mode():
+            out_ids = model.generate(**inputs, **gen_kwargs)
+        return tok.decode(out_ids[0, prompt_len:], skip_special_tokens=True).strip()
+
+    # ── argument parsing ──────────────────────────────────────────────────────
+
+    def _parse_args() -> "_argparse.Namespace":
+        p = _argparse.ArgumentParser(
+            description=(
+                "Step 3: run forced-policy MoCE per (prompt, candidate policy) "
+                "and write candidate_traces.jsonl."
+            )
+        )
+        p.add_argument("--config", type=_Path, required=True,
+                       help="path to config.yaml")
+        p.add_argument("--limit", type=int, default=None,
+                       help="process at most this many prompts after selection (smoke test)")
+        p.add_argument("--stratify", type=int, default=None,
+                       help="take this many prompts per quadrant (recommended over --limit)")
+        p.add_argument("--device", type=str, default=None,
+                       help="override config device (cuda / cpu)")
+        p.add_argument("--adapter-left-lib",   type=_Path, default=None,
+                       help="override left_lib checkpoint path")
+        p.add_argument("--adapter-left-auth",  type=_Path, default=None,
+                       help="override left_auth checkpoint path")
+        p.add_argument("--adapter-right-lib",  type=_Path, default=None,
+                       help="override right_lib checkpoint path")
+        p.add_argument("--adapter-right-auth", type=_Path, default=None,
+                       help="override right_auth checkpoint path")
+        return p.parse_args()
+
+    # ── main ──────────────────────────────────────────────────────────────────
+
+    def _main() -> None:
+        args = _parse_args()
+        cfg  = _load_cfg(args.config)
+
+        device = args.device or cfg.model.device
+        dtype  = (
+            _torch.bfloat16
+            if str(getattr(cfg.model, "dtype", "bfloat16")) == "bfloat16"
+            else _torch.float32
+        )
+
+        ckpt = cfg.paths.expert_checkpoints
+        checkpoints: dict[str, _Path] = {
+            "left_lib":   args.adapter_left_lib   or _Path(ckpt.left_lib_checkpoint),
+            "left_auth":  args.adapter_left_auth   or _Path(ckpt.left_auth_checkpoint),
+            "right_lib":  args.adapter_right_lib   or _Path(ckpt.right_lib_checkpoint),
+            "right_auth": args.adapter_right_auth  or _Path(ckpt.right_auth_checkpoint),
+        }
+
+        features_path = _Path(cfg.paths.features_path)
+        output_path   = _Path(cfg.paths.candidate_traces_path)
+
+        # ── pre-flight ───────────────────────────────────────────────────────
+        if not features_path.is_file():
+            _log.error("features.jsonl not found: %s — run features.py first", features_path)
+            _sys.exit(1)
+        for name, ckpt_path in checkpoints.items():
+            if not (_Path(ckpt_path) / "adapter_config.json").is_file():
+                _log.error(
+                    "adapter '%s' missing adapter_config.json at %s", name, ckpt_path
+                )
+                _sys.exit(1)
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # ── load features ────────────────────────────────────────────────────
+        _log.info("loading features from %s", features_path)
+        with features_path.open() as fh:
+            features = [_json.loads(ln) for ln in fh if ln.strip()]
+        _log.info("loaded %d prompt records total", len(features))
+
+        if args.stratify is not None:
+            # stratified sample: take up to N records per quadrant (by economic+social sign)
+            from collections import defaultdict as _defaultdict
+            import random as _random
+            _random.seed(int(cfg.candidate_policies.seed))
+            by_q: dict = _defaultdict(list)
+            for r in features:
+                e, s = r["economic_score"], r["social_score"]
+                q = ("right" if e > 0 else "left") + "_" + ("auth" if s > 0 else "lib")
+                by_q[q].append(r)
+            selected = []
+            for q, recs in sorted(by_q.items()):
+                _random.shuffle(recs)
+                chosen = recs[: args.stratify]
+                _log.info("stratify: %s → %d / %d records", q, len(chosen), len(recs))
+                selected.extend(chosen)
+            _random.shuffle(selected)
+            features = selected
+
+        elif args.limit is not None:
+            # plain limit without shuffle warns if ordering may be skewed
+            _log.warning(
+                "--limit without --stratify: features.jsonl is source-sorted, "
+                "first %d rows may not cover all quadrants — consider --stratify instead",
+                args.limit,
+            )
+            features = features[: args.limit]
+
+        _log.info("selected %d prompt records for processing", len(features))
+
+        # ── resume: skip already-written example_ids ─────────────────────────
+        done_ids: set = set()
+        if output_path.is_file():
+            with output_path.open() as fh:
+                for ln in fh:
+                    ln = ln.strip()
+                    if ln:
+                        try:
+                            done_ids.add(_json.loads(ln)["example_id"])
+                        except Exception:
+                            pass
+            if done_ids:
+                _log.info("resuming — %d unique example_ids already written", len(done_ids))
+
+        todo = [f for f in features if f["example_id"] not in done_ids]
+        _log.info("%d prompts to process (%d already done)", len(todo), len(done_ids))
+        if not todo:
+            _log.info("nothing to do")
+            return
+
+        # ── load model + all 4 adapters ──────────────────────────────────────
+        model, tok = _load_model_and_adapters(base_model=cfg.model.base_model,
+                                              checkpoints=checkpoints,
+                                              device=device, dtype=dtype)
+
+        # ── per-prompt candidate policy RNG (seeded, deterministic) ──────────
+        rng = _np.random.default_rng(int(cfg.candidate_policies.seed))
+
+        # ── main generation loop ─────────────────────────────────────────────
+        n_traces = 0
+        with output_path.open("a") as out_fh:
+            for idx, feat in enumerate(todo):
+                example_id  = feat["example_id"]
+                prompt_text = feat["prompt_text"]
+                q_scores    = feat["quadrant_scores"]
+
+                prior    = _heuristic_prior(q_scores)
+                policies = _build_candidate_policies(prior, cfg.candidate_policies, rng)
+
+                for policy in policies:
+                    adapter    = _argmax_adapter(policy)
+                    final_text = _generate(model, tok, prompt_text, adapter,
+                                           cfg.generation, device)
+                    record = {
+                        "example_id":      example_id,
+                        "prompt_text":     prompt_text,
+                        "forced_policy":   {k: round(policy[k], 8) for k in _ORDER},
+                        "heuristic_prior": {k: round(prior[k],   8) for k in _ORDER},
+                        "final_text":      final_text,
+                        "metadata": {
+                            "argmax_adapter": adapter,
+                            "source":         feat.get("source", ""),
+                        },
+                    }
+                    out_fh.write(_json.dumps(record, ensure_ascii=False) + "\n")
+                    n_traces += 1
+
+                if (idx + 1) % 50 == 0 or (idx + 1) == len(todo):
+                    _log.info(
+                        "progress  prompt %d/%d  |  %d traces written",
+                        idx + 1, len(todo), n_traces,
+                    )
+                    out_fh.flush()
+
+        _log.info("done — %d traces → %s", n_traces, output_path)
+
+    _main()
+
+
 # === CLI: ARGUMENT PARSING ===
 
 def parse_args() -> argparse.Namespace:

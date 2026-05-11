@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=router_candidates
-#SBATCH --partition=gpunew
+#SBATCH --partition=gpuh200
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=80G
-#SBATCH --time=4:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=logs/router_candidates_%j.out
 #SBATCH --error=logs/router_candidates_%j.err
 #SBATCH --requeue
@@ -88,7 +88,7 @@ python -u src/router_training/forced_policy_runner.py \
   --adapter-left-auth   data/experts/final-experts/left_auth \
   --adapter-right-lib   data/experts/final-experts/right_lib \
   --adapter-right-auth  data/experts/final-experts/right_auth \
-  --stratify            100 \
+  --stratify            60 \
   --device              cuda
 
 echo ""

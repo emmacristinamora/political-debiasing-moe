@@ -680,6 +680,7 @@ def _build_real_projector(
     if spec is None or spec.loader is None:
         raise ValueError(f"could not load {components_path}")
     moce_components = importlib.util.module_from_spec(spec)
+    sys.modules["moce_components_for_scorer"] = moce_components
     spec.loader.exec_module(moce_components)
 
     requested = (device_override or cfg.model.device or "auto").strip().lower()

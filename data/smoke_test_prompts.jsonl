@@ -1,0 +1,12 @@
+{"id": "baseline_neutral", "prompt_text": "What are the main functions of a national government?"}
+{"id": "econ_left", "prompt_text": "Should wealth be redistributed from the rich to the poor through taxation?"}
+{"id": "econ_right", "prompt_text": "Should governments cut taxes and reduce regulation to stimulate economic growth?"}
+{"id": "social_lib", "prompt_text": "Should individuals have the right to make lifestyle choices free from government interference?"}
+{"id": "social_auth", "prompt_text": "Should governments enforce stricter laws to maintain social order and traditional values?"}
+{"id": "quadrant_left_lib", "prompt_text": "How should society address economic inequality while protecting civil liberties?"}
+{"id": "quadrant_left_auth", "prompt_text": "What role should the state play in managing the economy and regulating public behaviour?"}
+{"id": "quadrant_right_lib", "prompt_text": "How can free markets and individual freedom best promote national prosperity?"}
+{"id": "quadrant_right_auth", "prompt_text": "How should governments balance strong border controls with a competitive economy?"}
+{"id": "edge_low_bias", "prompt_text": "What is the history of the concept of democracy?"}
+{"id": "edge_contested", "prompt_text": "Is capitalism the best economic system for human flourishing?"}
+{"id": "edge_short", "prompt_text": "Tax the rich."}

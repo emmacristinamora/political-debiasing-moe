@@ -487,3 +487,54 @@ router_calibration:
     seed: 42
     device: cuda
     # output layout: outputs/experts/{quadrant}/seed_{seed}/
+
+
+# === MOCE INFERENCE RUNTIME ===
+# Consumed by src/10_run_moce.py. Self-contained: does not reference any
+# field under router_calibration. Heuristic router is the default at runtime;
+# calibrated routing is opt-in via the CLI (--calibrated --router-checkpoint).
+
+moce_inference:
+  model:
+    base_model: mistralai/Mistral-7B-v0.1
+    dtype: bfloat16
+    device: cuda
+
+  steering_vectors:
+    economic_vector_path: data/steering-vectors/vectors/economic_vectors.pt
+    social_vector_path:   data/steering-vectors/vectors/social_vectors.pt
+
+  input_transformer:
+    vector_method: logistic_regression
+    use_final_aggregated_vectors: true
+    selected_layers: [8, 12, 16, 20, 24]
+    pooling_method: mean
+    use_centering: false
+    neutral_reference_path: null
+    calibration_input_dim: 4096
+
+  expert_checkpoints:
+    left_lib_checkpoint:   data/experts/final-experts/left_lib
+    left_auth_checkpoint:  data/experts/final-experts/left_auth
+    right_lib_checkpoint:  data/experts/final-experts/right_lib
+    right_auth_checkpoint: data/experts/final-experts/right_auth
+
+  router:
+    beta: 1.0
+    temperature: 1.0
+    fallback_to_uniform_if_centered: true
+    center_threshold: 0.05
+
+  editor:
+    max_edit_steps: 1
+    correction_beta: 1.0
+    initialization_mode: router_policy
+    use_recursive_editing: true
+    initialize_from_router: true
+    convergence_threshold: 1.0e-3
+
+  generation:
+    max_new_tokens: 256
+    temperature: 0.7
+    do_sample: false
+    top_p: 1.0

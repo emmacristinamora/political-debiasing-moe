@@ -38,3 +38,6 @@ notebooks/**/.ipynb_checkpoints/
 # editor
 .vscode/
 .idea/
+
+# large archives
+*.zip

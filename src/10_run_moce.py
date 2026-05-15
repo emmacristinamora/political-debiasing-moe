@@ -241,6 +241,8 @@ def build_engine(
         temperature=gen_temperature,
         do_sample=gen_do_sample,
         top_p=gen_top_p,
+        frequency_penalty=float(gcfg.get("frequency_penalty", 0.0)),
+        no_repeat_ngram_size=int(gcfg.get("no_repeat_ngram_size", 0)),
     )
 
     engine = moce.MoCEEngine(

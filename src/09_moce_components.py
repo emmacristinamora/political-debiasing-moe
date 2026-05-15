@@ -173,12 +173,24 @@ class GenerationConfig:
     Responsibilities:
     - define generation settings shared by all experts
     - keep decoding behavior consistent across router/editor experiments
+
+    Repetition control (applied by MoCEEngine during decoding only):
+    - frequency_penalty: additive, count-scaled penalty subtracted from
+      the logit of every token already generated for the current prompt
+      (occurrence count times the penalty). 0.0 disables it. Counts cover
+      generated tokens only -- the prompt is excluded so common prompt
+      function words are not penalized.
+    - no_repeat_ngram_size: hard ban on repeating any n-gram of this size
+      already present in the generated sequence. 0 disables it. The ban
+      spans the full generated history; it does not touch the prompt.
     """
 
     max_new_tokens: int = 256
     temperature: float = 0.7
     do_sample: bool = False
     top_p: float = 1.0
+    frequency_penalty: float = 0.0
+    no_repeat_ngram_size: int = 0
 
 
 @dataclass
@@ -3915,7 +3927,9 @@ class MoCEEngine:
                 contribution = expert_outputs[q].final_hidden_state * alpha_floats[q]
                 seed_vec = contribution if seed_vec is None else seed_vec + contribution
 
-            next_token = self._decode_seed_to_token_id(seed_vec, lm_head, lm_dtype)
+            next_token = self._decode_seed_to_token_id(
+                seed_vec, lm_head, lm_dtype, generated
+            )
             generated.append(next_token)
 
             # --- subsequent tokens: step all experts on the previous token ---
@@ -3929,7 +3943,9 @@ class MoCEEngine:
                             contribution if seed_vec is None
                             else seed_vec + contribution
                         )
-                    next_token = self._decode_seed_to_token_id(seed_vec, lm_head, lm_dtype)
+                    next_token = self._decode_seed_to_token_id(
+                        seed_vec, lm_head, lm_dtype, generated
+                    )
                     generated.append(next_token)
                     if eos_token_id is not None and next_token == int(eos_token_id):
                         break
@@ -3959,6 +3975,7 @@ class MoCEEngine:
         seed_vec: torch.Tensor,
         lm_head: Any,
         lm_dtype: torch.dtype,
+        generated_token_ids: list[int],
     ) -> int:
         """
         Apply the LM head to a single mixed seed vector and return the
@@ -3971,6 +3988,17 @@ class MoCEEngine:
         - do_sample is True: temperature-scaled, top-p (nucleus) filtered
           multinomial sampling. Seed the global torch RNG upstream for
           reproducible sampled runs.
+
+        Repetition control runs on the float32 logits before token
+        selection, conditioned on generated_token_ids (the tokens already
+        produced for the current prompt, in order; empty for the first
+        generated token):
+        - GenerationConfig.frequency_penalty subtracts a count-scaled
+          penalty from each previously generated token's logit
+        - GenerationConfig.no_repeat_ngram_size hard-bans (-inf) any token
+          that would repeat an already-seen n-gram
+        Both act on the generated history only; the prompt is never
+        penalized, so common prompt function words keep their logits.
 
         Logits are moved to float32 before selection for numerical stability
         (bfloat16 argmax can tie or skew on near-equal logits).
@@ -3994,10 +4022,104 @@ class MoCEEngine:
         if not torch.isfinite(logits).all().item():
             raise ValueError("LM head produced NaN or inf logits")
 
+        # repetition control: penalize / ban tokens from the generated
+        # history before selection (no-op when both knobs are disabled)
+        logits = self._apply_frequency_penalty(logits, generated_token_ids)
+        logits = self._apply_no_repeat_ngram(logits, generated_token_ids)
+
         gen_cfg = self.expert_manager.generation_config
         if not gen_cfg.do_sample or gen_cfg.temperature <= 0.0:
             return int(logits.argmax(dim=-1).item())
         return self._sample_token_id(logits, gen_cfg.temperature, gen_cfg.top_p)
+
+    def _apply_frequency_penalty(
+        self,
+        logits: torch.Tensor,
+        generated_token_ids: list[int],
+    ) -> torch.Tensor:
+        """
+        Subtract an additive, count-scaled frequency penalty from the
+        logits of tokens already generated for the current prompt.
+
+        For every token id t in generated_token_ids:
+            logits[t] -= frequency_penalty * count(t)
+        so a token caught in a loop is pushed down further on each
+        repeat. Counts cover the generated history only; the prompt is
+        excluded by construction (it is never passed in here).
+
+        Returns the input logits unchanged when frequency_penalty is 0.0
+        or no tokens have been generated yet. The returned tensor is a
+        new tensor; the input is not mutated.
+
+        Raises:
+        - ValueError if GenerationConfig.frequency_penalty is negative
+          (a negative value would reward repetition).
+        """
+        penalty = float(self.expert_manager.generation_config.frequency_penalty)
+        if penalty < 0.0:
+            raise ValueError(
+                f"GenerationConfig.frequency_penalty must be >= 0; got {penalty}"
+            )
+        if penalty == 0.0 or not generated_token_ids:
+            return logits
+
+        counts: dict[int, int] = {}
+        for tid in generated_token_ids:
+            counts[tid] = counts.get(tid, 0) + 1
+        ordered_ids = sorted(counts)
+        ids = torch.tensor(ordered_ids, device=logits.device, dtype=torch.long)
+        amounts = torch.tensor(
+            [penalty * counts[i] for i in ordered_ids],
+            device=logits.device,
+            dtype=logits.dtype,
+        )
+        return logits.index_copy(-1, ids, logits.index_select(-1, ids) - amounts)
+
+    def _apply_no_repeat_ngram(
+        self,
+        logits: torch.Tensor,
+        generated_token_ids: list[int],
+    ) -> torch.Tensor:
+        """
+        Hard-ban (set logit to -inf) any token that would complete an
+        n-gram already present in the generated sequence.
+
+        With n = GenerationConfig.no_repeat_ngram_size, the trailing
+        (n-1) generated tokens form the current prefix; every earlier
+        occurrence of that same prefix contributes the token that
+        followed it as a banned continuation. This kills sentence- and
+        phrase-level loops outright.
+
+        Returns the input logits unchanged when no_repeat_ngram_size is
+        0 (disabled), when fewer than n tokens have been generated, or
+        when the ban would cover the entire vocabulary (left intact so
+        selection still has a candidate). The returned tensor is a new
+        tensor; the input is not mutated.
+
+        Raises:
+        - ValueError if GenerationConfig.no_repeat_ngram_size is negative.
+        """
+        n = int(self.expert_manager.generation_config.no_repeat_ngram_size)
+        if n < 0:
+            raise ValueError(
+                f"GenerationConfig.no_repeat_ngram_size must be >= 0; got {n}"
+            )
+        if n == 0 or len(generated_token_ids) < n:
+            return logits
+
+        prefix = tuple(generated_token_ids[-(n - 1):]) if n > 1 else ()
+        banned: set[int] = set()
+        for i in range(len(generated_token_ids) - n + 1):
+            if tuple(generated_token_ids[i:i + n - 1]) == prefix:
+                banned.add(generated_token_ids[i + n - 1])
+        if not banned or len(banned) >= int(logits.shape[-1]):
+            return logits
+
+        ids = torch.tensor(sorted(banned), device=logits.device, dtype=torch.long)
+        neg_inf = torch.full(
+            (ids.numel(),), float("-inf"), device=logits.device, dtype=logits.dtype
+        )
+        return logits.index_copy(-1, ids, neg_inf)
 
     def _sample_token_id(
         self,

@@ -554,3 +554,9 @@ moce_inference:
     temperature: 0.7
     do_sample: false
     top_p: 1.0
+    # repetition control, applied at decode time (generated tokens only;
+    # the prompt is never penalized). frequency_penalty: additive,
+    # count-scaled (0.0 disables). no_repeat_ngram_size: hard ban on
+    # repeating any n-gram of this size (0 disables).
+    frequency_penalty: 0.4
+    no_repeat_ngram_size: 3

@@ -291,6 +291,8 @@ def compute_pct_projection(
     social_vector: torch.Tensor,
     projection_layer: int,
     device: str,
+    *,
+    prefix_text: Optional[str] = None,
 ) -> dict:
     """
     Project text into PCT coordinate space via hidden-state dot products.
@@ -300,6 +302,15 @@ def compute_pct_projection(
         extracts hidden states at projection_layer (0=embeddings, 1=layer1, ...),
         mean-pools over non-padding tokens, normalises the pooled vector, then
         dots with the unit-norm econ and social steering vectors.
+
+        When prefix_text is supplied the forward pass still runs on the full
+        text (so response token hidden states are contextualized by the
+        statement via attention), but the mean pool is computed only over
+        tokens that follow the prefix. This prevents the statement's own
+        political signal from contaminating the projection coordinate.
+        If the prefix consumes the entire sequence (edge case: very long
+        statement + short max_length), the function falls back to pooling
+        over all tokens rather than returning a zero vector.
     """
     enc = tokenizer(
         text,
@@ -310,6 +321,24 @@ def compute_pct_projection(
     )
     input_ids      = enc["input_ids"].to(device)
     attention_mask = enc["attention_mask"].to(device)
+    seq_len        = input_ids.shape[1]
+
+    # Build pool_mask: start from attention_mask, then zero out prefix tokens.
+    pool_mask = attention_mask.clone()  # [1, seq_len]
+    if prefix_text is not None:
+        prefix_enc = tokenizer(
+            prefix_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+            padding=False,
+        )
+        n_prefix = prefix_enc["input_ids"].shape[1]
+        n_mask   = min(n_prefix, seq_len)
+        pool_mask[0, :n_mask] = 0
+        # Fallback: if no response tokens remain, pool over everything.
+        if pool_mask.sum() == 0:
+            pool_mask = attention_mask.clone()
 
     with torch.inference_mode():
         outputs = model(
@@ -327,8 +356,8 @@ def compute_pct_projection(
 
     layer_out = hidden_states[projection_layer]  # [1, seq_len, hidden_dim]
 
-    # Mean pool over non-padding tokens; cast to float32 for numerical stability
-    mask   = attention_mask.unsqueeze(-1).float()                           # [1, seq_len, 1]
+    # Mean pool over response tokens only (or all tokens if no prefix given).
+    mask   = pool_mask.unsqueeze(-1).float()                                # [1, seq_len, 1]
     pooled = (layer_out.float() * mask).sum(dim=1) / mask.sum(dim=1)       # [1, hidden_dim]
     pooled = pooled.squeeze(0)                                              # [hidden_dim]
 
@@ -555,6 +584,7 @@ def run_method1(
             proj      = compute_pct_projection(
                 proj_model, proj_tokenizer, proj_text,
                 econ_vector, social_vector, projection_layer, device,
+                prefix_text=f"{stmt['text']}\n\nResponse:\n",
             )
 
         matches = None
@@ -679,6 +709,7 @@ def run_method2(
                 proj      = compute_pct_projection(
                     proj_model, proj_tokenizer, proj_text,
                     econ_vector, social_vector, projection_layer, device,
+                    prefix_text=f"{stmt['text']}\n\nResponse:\n",
                 )
 
             baseline = m1_index.get(stmt["id"])
@@ -792,6 +823,7 @@ def run_method3(
             else compute_pct_projection(
                 proj_model, proj_tokenizer, proj_text,
                 econ_vector, social_vector, projection_layer, device,
+                prefix_text=f"{q['question']}\n\nAnswer:\n",
             )
         )
 

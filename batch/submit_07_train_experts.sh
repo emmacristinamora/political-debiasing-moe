@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=80G
-#SBATCH --time=8:00:00
+#SBATCH --time=10:00:00
 #SBATCH --output=logs/train_experts_%j.out
 #SBATCH --error=logs/train_experts_%j.err
 #SBATCH --requeue
@@ -33,6 +33,7 @@ export TRANSFORMERS_CACHE="$HF_HOME"
 export HF_HUB_ENABLE_HF_TRANSFER=0
 export TOKENIZERS_PARALLELISM=false
 export CUBLAS_WORKSPACE_CONFIG=:4096:8
+export MPLBACKEND=Agg
 
 echo "[info] repo_root=${REPO_ROOT}"
 echo "[info] python=$(which python)"

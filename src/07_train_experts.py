@@ -1,8 +1,5 @@
 # src/07_train_experts.py
 
-
-# === IMPORTS ===
-
 from __future__ import annotations
 
 import argparse
@@ -14,14 +11,19 @@ import random
 import shutil
 import sys
 import time
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend; safe on headless cluster nodes
+import matplotlib.pyplot as plt
 import torch
 import yaml
 from datasets import Dataset
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+from torch.nn import CrossEntropyLoss
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -84,13 +86,17 @@ class TrainParams:
 
 @dataclass
 class EvalParams:
-    eval_strategy: str
-    save_strategy: str
+    evals_per_epoch: int
     save_total_limit: int
-    load_best_model_at_end: bool
     metric_for_best_model: str
     greater_is_better: bool
-    early_stopping_patience: int
+
+
+@dataclass
+class WeightingParams:
+    enabled: bool
+    max_weight_cap: float
+    source_groups: dict[str, list[str]]  # group_name -> [source_name, ...]
 
 
 @dataclass
@@ -109,6 +115,7 @@ class ExpertConfig:
     lora: LoraParams
     training: TrainParams
     evaluation: EvalParams
+    weighting: WeightingParams
     generation: GenerationParams
     logging_steps: int
     report_to: str
@@ -120,19 +127,6 @@ class ExpertConfig:
 # === CONFIG LOADING ===
 
 def load_config(path: Path) -> ExpertConfig:
-    """
-    Load and validate the train_experts block from config.yaml.
-
-    Args:
-        path: path to config.yaml
-
-    Returns:
-        Validated ExpertConfig dataclass.
-
-    Logic:
-        Reads YAML, extracts train_experts block, validates all required keys
-        and field constraints, then constructs and returns ExpertConfig.
-    """
     with path.open(encoding="utf-8") as fh:
         raw = yaml.safe_load(fh)
 
@@ -141,19 +135,14 @@ def load_config(path: Path) -> ExpertConfig:
     cfg = raw["train_experts"]
 
     required = {"base_model", "precision", "lora", "training", "evaluation",
-                "generation", "logging", "seeds", "paths"}
+                "weighting", "generation", "logging", "seeds", "paths"}
     missing = required - set(cfg.keys())
     if missing:
         raise ValueError(f"train_experts config missing keys: {missing}")
 
-    if not isinstance(cfg["base_model"], str) or not cfg["base_model"].strip():
-        raise ValueError("train_experts.base_model must be a non-empty string")
-
     lora_raw = cfg["lora"]
     if not isinstance(lora_raw.get("r"), int) or lora_raw["r"] <= 0:
         raise ValueError("train_experts.lora.r must be a positive integer")
-    if not isinstance(lora_raw.get("target_modules"), list) or not lora_raw["target_modules"]:
-        raise ValueError("train_experts.lora.target_modules must be a non-empty list")
 
     lr = cfg["training"].get("learning_rate")
     if not (0 < lr < 1):
@@ -169,10 +158,14 @@ def load_config(path: Path) -> ExpertConfig:
         raise ValueError(f"train_validate_dir does not exist: {train_validate_dir}")
     output_dir = PROJECT_ROOT / paths_raw["output_dir"]
 
-    train_raw = cfg["training"]
-    eval_raw  = cfg["evaluation"]
-    gen_raw   = cfg["generation"]
-    log_raw   = cfg["logging"]
+    train_raw   = cfg["training"]
+    eval_raw    = cfg["evaluation"]
+    weight_raw  = cfg["weighting"]
+    gen_raw     = cfg["generation"]
+    log_raw     = cfg["logging"]
+
+    # build source -> group reverse map for fast lookup
+    source_groups: dict[str, list[str]] = weight_raw.get("source_groups", {})
 
     return ExpertConfig(
         base_model=cfg["base_model"],
@@ -199,13 +192,15 @@ def load_config(path: Path) -> ExpertConfig:
             dataloader_num_workers=train_raw["dataloader_num_workers"],
         ),
         evaluation=EvalParams(
-            eval_strategy=eval_raw["eval_strategy"],
-            save_strategy=eval_raw["save_strategy"],
+            evals_per_epoch=eval_raw["evals_per_epoch"],
             save_total_limit=eval_raw["save_total_limit"],
-            load_best_model_at_end=eval_raw["load_best_model_at_end"],
             metric_for_best_model=eval_raw["metric_for_best_model"],
             greater_is_better=eval_raw["greater_is_better"],
-            early_stopping_patience=eval_raw["early_stopping_patience"],
+        ),
+        weighting=WeightingParams(
+            enabled=weight_raw["enabled"],
+            max_weight_cap=float(weight_raw["max_weight_cap"]),
+            source_groups=source_groups,
         ),
         generation=GenerationParams(
             enabled=gen_raw["enabled"],
@@ -245,28 +240,49 @@ def load_split(path: Path) -> list[dict]:
     return records
 
 
+def compute_source_group_weights(
+    chunks: list[dict],
+    source_groups: dict[str, list[str]],
+    max_cap: float = 3.0,
+) -> list[float]:
+    """
+    Inverse-frequency weights by source group, capped and normalised to mean=1.
+
+    source_groups maps group_name -> list[source_name]. Sources not present in
+    the mapping are assigned to an implicit "other" group.
+    """
+    # build reverse map: source_name -> group_name
+    src_to_group: dict[str, str] = {}
+    for group, sources in source_groups.items():
+        for src in sources:
+            src_to_group[src] = group
+
+    groups = [src_to_group.get(c["source"], "other") for c in chunks]
+    counts = Counter(groups)
+    n_groups = len(counts)
+    n_total  = len(groups)
+
+    # raw inverse-frequency: w_g = total / (n_groups * count_g)
+    raw = {g: n_total / (n_groups * c) for g, c in counts.items()}
+    capped = {g: min(w, max_cap) for g, w in raw.items()}
+
+    # log the resulting distribution
+    for g, w in sorted(capped.items()):
+        log.info("  source_group %-12s  n=%5d  raw_w=%.3f  capped_w=%.3f",
+                 g, counts[g], raw[g], w)
+
+    return [capped[g] for g in groups]
+
+
 def tokenize_chunks(
     chunks: list[dict],
     tokenizer: AutoTokenizer,
     max_length: int = 700,
+    weights: list[float] | None = None,
 ) -> Dataset:
     """
-    Tokenize a list of chunk dicts for causal LM training.
-
-    Args:
-        chunks:     list of dicts, each with a non-empty 'text' field
-        tokenizer:  HuggingFace tokenizer
-        max_length: truncation cap in tokens
-
-    Returns:
-        HuggingFace Dataset with input_ids and attention_mask columns.
-        Labels are created by DataCollatorForLanguageModeling at collation time.
-
-    Logic:
-        Tokenizes each chunk's text with truncation. Does not set labels —
-        DataCollatorForLanguageModeling(mlm=False) clones input_ids to labels
-        and masks padding positions with -100 after batching. Logs token length
-        statistics and truncation count.
+    Tokenize chunks for causal LM. Optionally stores a per-example weight column
+    used by WeightedTrainer to apply source-group loss reweighting.
     """
     token_lengths: list[int] = []
     n_truncated = 0
@@ -282,7 +298,11 @@ def tokenize_chunks(
         if seq_len == max_length:
             n_truncated += 1
         token_lengths.append(seq_len)
-        rows.append(enc)
+
+        row = dict(enc)
+        if weights is not None:
+            row["weight"] = weights[i]
+        rows.append(row)
 
     mean_len = sum(token_lengths) / len(token_lengths) if token_lengths else 0.0
     log.info(
@@ -292,8 +312,62 @@ def tokenize_chunks(
     return Dataset.from_list(rows)
 
 
-def build_data_collator(tokenizer: AutoTokenizer) -> DataCollatorForLanguageModeling:
-    return DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+# === WEIGHTED TRAINING UTILITIES ===
+
+class WeightedDataCollator(DataCollatorForLanguageModeling):
+    """
+    Wraps DataCollatorForLanguageModeling to extract per-example weights before
+    padding (the tokenizer's pad() call does not know how to handle scalar floats)
+    and re-attach them to the batch as a float32 tensor.
+    """
+
+    def __call__(self, features: list[dict]) -> dict:
+        weights = [float(f.pop("weight", 1.0)) for f in features]
+        batch = super().__call__(features)
+        batch["weight"] = torch.tensor(weights, dtype=torch.float32)
+        return batch
+
+
+class WeightedTrainer(Trainer):
+    """
+    Trainer subclass that applies per-example loss weights.
+
+    Computes the mean token-level cross-entropy per example, multiplies by
+    the example's weight, then averages over the batch. Falls back to the
+    standard Trainer.compute_loss if no weight column is present (e.g. during
+    evaluation or dry-run).
+    """
+
+    def compute_loss(
+        self,
+        model: Any,
+        inputs: dict,
+        return_outputs: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        weights = inputs.pop("weight", None)
+        labels  = inputs.get("labels")
+
+        outputs = model(**inputs)
+
+        if weights is None or labels is None:
+            return (outputs.loss, outputs) if return_outputs else outputs.loss
+
+        logits = outputs.logits
+        shift_logits = logits[..., :-1, :].contiguous()   # (B, T-1, V)
+        shift_labels = labels[..., 1:].contiguous()        # (B, T-1)
+
+        loss_fct    = CrossEntropyLoss(reduction="none")
+        token_loss  = loss_fct(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1),
+        ).view(shift_labels.size())                        # (B, T-1); -100 positions → 0
+
+        mask = (shift_labels != -100).float()              # (B, T-1)
+        per_example = (token_loss * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)  # (B,)
+        loss = (per_example * weights.to(per_example.device)).mean()
+
+        return (loss, outputs) if return_outputs else loss
 
 
 # === LORA SETUP ===
@@ -310,29 +384,12 @@ def build_lora_model(
     lora_params: LoraParams,
     precision: str,
 ) -> tuple[PeftModel, AutoTokenizer]:
-    """
-    Load base model and wrap with LoRA adapter.
-
-    Args:
-        base_model_name: HuggingFace model id
-        lora_params:     LoRA hyperparameters
-        precision:       one of bfloat16 / float16 / float32
-
-    Returns:
-        (PeftModel, AutoTokenizer) with only LoRA parameters trainable.
-
-    Logic:
-        Loads tokenizer, aliases pad→eos for Mistral (no pad token in vocab),
-        loads base model frozen at the requested dtype, wraps with LoraConfig,
-        then asserts that no non-LoRA parameter has requires_grad=True.
-    """
     if precision not in _PRECISION_MAP:
         raise ValueError(f"unsupported precision '{precision}'; choose from {list(_PRECISION_MAP)}")
 
     log.info("loading tokenizer: %s", base_model_name)
     tokenizer = AutoTokenizer.from_pretrained(base_model_name)
     if tokenizer.pad_token is None:
-        # mistral has no pad token; alias to eos without resizing embeddings
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
@@ -362,31 +419,18 @@ def build_lora_model(
     return model, tokenizer
 
 
-# === CALLBACKS ===
-
 def _input_device(model: torch.nn.Module) -> torch.device:
     return next(model.parameters()).device
 
+
+# === CALLBACKS ===
+
 class MultiSplitEvalCallback(TrainerCallback):
     """
-    Evaluates model on three val splits after each epoch and handles early stopping.
-
-    Args:
-        val_indist_dataset:      full in-distribution val set
-        val_source_dataset:      held-out source val set (subsampled at init)
-        val_topic_dataset:       held-out topic val set (subsampled at init)
-        tokenizer:               tokenizer for the data collator
-        log_path:                path for train_log.jsonl (one line per epoch)
-        early_stopping_patience: stop if val_source_loss doesn't improve for N epochs
-        early_stopping_threshold: minimum improvement to count as progress
-
-    Logic:
-        Hooks on_evaluate (not on_epoch_end) so metrics are injected into the
-        Trainer's metrics dict before any downstream callback reads them. Early
-        stopping is implemented here directly because EarlyStoppingCallback cannot
-        read metrics injected by a callback. val_source and val_topic losses are
-        computed on a fixed 500-chunk subsample seeded once at __init__ time so
-        losses are comparable across epochs.
+    Evaluates on val_indist (full), val_source (subsampled), and val_topic (subsampled)
+    at every eval step. Logs all three losses plus their mean to train_log.jsonl.
+    Saves the adapter weights directly whenever the mean val loss improves, so the
+    best checkpoint is always available regardless of trainer save_total_limit.
     """
 
     _SUBSAMPLE_SIZE  = 500
@@ -400,128 +444,167 @@ class MultiSplitEvalCallback(TrainerCallback):
         val_topic_dataset: Dataset,
         tokenizer: AutoTokenizer,
         log_path: Path,
-        early_stopping_patience: int,
+        best_ckpt_path: Path,
         precision: str,
-        early_stopping_threshold: float = 0.001,
     ) -> None:
-        self.val_indist_dataset       = val_indist_dataset
-        self.tokenizer                = tokenizer
-        self.log_path                 = log_path
-        self.early_stopping_patience  = early_stopping_patience
-        self.early_stopping_threshold = early_stopping_threshold
-        self.eval_dtype               = _PRECISION_MAP[precision]
-        self.best_val_source_loss     = float("inf")
-        self.bad_epochs               = 0
-        self.epoch_logs: list[dict]   = []
+        self.val_indist_dataset = val_indist_dataset
+        self.tokenizer          = tokenizer
+        self.log_path           = log_path
+        self.best_ckpt_path     = best_ckpt_path
+        self.eval_dtype         = _PRECISION_MAP[precision]
+        self.best_mean_val_loss = float("inf")
+        self.eval_logs: list[dict] = []
         self.data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
         rng = random.Random(self._SUBSAMPLE_SEED)
-        src_idx = rng.sample(
-            range(len(val_source_dataset)),
-            min(self._SUBSAMPLE_SIZE, len(val_source_dataset)),
+        self.val_source_sub = val_source_dataset.select(
+            rng.sample(range(len(val_source_dataset)),
+                       min(self._SUBSAMPLE_SIZE, len(val_source_dataset)))
         )
-        top_idx = rng.sample(
-            range(len(val_topic_dataset)),
-            min(self._SUBSAMPLE_SIZE, len(val_topic_dataset)),
+        self.val_topic_sub = val_topic_dataset.select(
+            rng.sample(range(len(val_topic_dataset)),
+                       min(self._SUBSAMPLE_SIZE, len(val_topic_dataset)))
         )
-        self.val_source_sub = val_source_dataset.select(src_idx)
-        self.val_topic_sub  = val_topic_dataset.select(top_idx)
         log.info(
-            "val_source subsample=%d (of %d)  val_topic subsample=%d (of %d)",
+            "val_source subsample=%d/%d  val_topic subsample=%d/%d",
             len(self.val_source_sub), len(val_source_dataset),
-            len(self.val_topic_sub), len(val_topic_dataset),
+            len(self.val_topic_sub),  len(val_topic_dataset),
         )
 
-    def _compute_split_loss(self, model: Any, dataset: Dataset) -> float:
+    def _split_loss(self, model: Any, dataset: Dataset) -> float:
         total_loss   = 0.0
         total_tokens = 0
-
         for i in range(0, len(dataset), self._EVAL_BATCH_SIZE):
             batch_slice = dataset[i : i + self._EVAL_BATCH_SIZE]
-            n_items = len(next(iter(batch_slice.values())))
-            # dataset slices may return tensors or plain lists; normalise to list
+            n = len(next(iter(batch_slice.values())))
             batch_list = [
                 {k: (v[j].tolist() if hasattr(v[j], "tolist") else v[j])
                  for k, v in batch_slice.items()}
-                for j in range(n_items)
+                for j in range(n)
             ]
-            batch = self.data_collator(batch_list)
+            batch  = self.data_collator(batch_list)
             device = _input_device(model)
             batch  = {k: v.to(device) for k, v in batch.items()}
-
             use_cuda = device.type == "cuda"
             with torch.no_grad(), torch.autocast(device.type, dtype=self.eval_dtype, enabled=use_cuda):
                 outputs = model(**batch)
-
-            n_tokens = (batch["labels"] != -100).sum().item()
-            total_loss   += outputs.loss.item() * n_tokens
-            total_tokens += n_tokens
-
+            n_tok = (batch["labels"] != -100).sum().item()
+            total_loss   += outputs.loss.item() * n_tok
+            total_tokens += n_tok
         return total_loss / total_tokens if total_tokens > 0 else float("nan")
 
-    def on_evaluate(
-        self,
-        args: Any,
-        state: Any,
-        control: Any,
-        metrics: dict | None = None,
-        **kwargs: Any,
-    ) -> None:
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         model = kwargs.get("model")
         if model is None:
             return
 
         model.eval()
-        val_indist_loss = self._compute_split_loss(model, self.val_indist_dataset)
-        val_source_loss = self._compute_split_loss(model, self.val_source_sub)
-        val_topic_loss  = self._compute_split_loss(model, self.val_topic_sub)
+        val_indist = self._split_loss(model, self.val_indist_dataset)
+        val_source = self._split_loss(model, self.val_source_sub)
+        val_topic  = self._split_loss(model, self.val_topic_sub)
         model.train()
 
+        mean_val = (val_indist + val_source + val_topic) / 3.0
+
         log.info(
-            "epoch %.0f — val_indist=%.4f  val_source=%.4f  val_topic=%.4f",
-            state.epoch, val_indist_loss, val_source_loss, val_topic_loss,
+            "step %d (epoch %.2f) — val_indist=%.4f  val_source=%.4f  val_topic=%.4f  mean=%.4f",
+            state.global_step, state.epoch, val_indist, val_source, val_topic, mean_val,
         )
 
         if metrics is not None:
-            metrics["eval_val_indist_loss"] = val_indist_loss
-            metrics["eval_val_source_loss"] = val_source_loss
-            metrics["eval_val_topic_loss"]  = val_topic_loss
+            metrics["eval_val_indist_loss"] = val_indist
+            metrics["eval_val_source_loss"] = val_source
+            metrics["eval_val_topic_loss"]  = val_topic
+            metrics["eval_mean_val_loss"]   = mean_val
 
         train_entries = [e for e in state.log_history if "loss" in e and "eval_loss" not in e]
         last_train = train_entries[-1] if train_entries else {}
 
-        self.epoch_logs.append({
-            "epoch": state.epoch,
-            "global_step": state.global_step,
-            "train_loss": last_train.get("loss", float("nan")),
-            "learning_rate": last_train.get("learning_rate", float("nan")),
-            "grad_norm": last_train.get("grad_norm", float("nan")),
-            "val_indist_loss": val_indist_loss,
-            "val_source_loss": val_source_loss,
-            "val_topic_loss": val_topic_loss,
+        self.eval_logs.append({
+            "epoch":           state.epoch,
+            "global_step":     state.global_step,
+            "train_loss":      last_train.get("loss", float("nan")),
+            "learning_rate":   last_train.get("learning_rate", float("nan")),
+            "grad_norm":       last_train.get("grad_norm", float("nan")),
+            "val_indist_loss": val_indist,
+            "val_source_loss": val_source,
+            "val_topic_loss":  val_topic,
+            "mean_val_loss":   mean_val,
         })
 
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("w", encoding="utf-8") as fh:
-            for record in self.epoch_logs:
+            for record in self.eval_logs:
                 fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-        # early stopping — EarlyStoppingCallback can't read custom-injected metrics
-        if val_source_loss < self.best_val_source_loss - self.early_stopping_threshold:
-            self.best_val_source_loss = val_source_loss
-            self.bad_epochs = 0
-        else:
-            self.bad_epochs += 1
-        if self.bad_epochs >= self.early_stopping_patience:
-            log.info(
-                "early stopping after epoch %.0f — no improvement over %d epochs",
-                state.epoch, self.early_stopping_patience,
-            )
-            control.should_training_stop = True
+        # save adapter directly when we see a new best — independent of trainer checkpoints
+        if mean_val < self.best_mean_val_loss:
+            self.best_mean_val_loss = mean_val
+            self.best_ckpt_path.mkdir(parents=True, exist_ok=True)
+            model.save_pretrained(str(self.best_ckpt_path))
+            self.tokenizer.save_pretrained(str(self.best_ckpt_path))
+            log.info("new best (mean_val=%.4f) saved to %s", mean_val, self.best_ckpt_path.name)
+
+
+class LearningCurvePlotCallback(TrainerCallback):
+    """
+    Maintains running loss histories and re-renders a single PNG after every
+    log step (train loss) and every eval (val losses). Overwrites the same file
+    each time — disk cost is one PNG (~150 KB) for the entire training run.
+    """
+
+    def __init__(self, save_path: Path, quadrant: str, seed: int) -> None:
+        self.save_path    = save_path
+        self.title        = f"{quadrant} — seed {seed}"
+        self.train_steps:  list[int]   = []
+        self.train_losses: list[float] = []
+        self.eval_steps:   list[int]   = []
+        self.val_indist:   list[float] = []
+        self.val_source:   list[float] = []
+        self.val_topic:    list[float] = []
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs and "loss" in logs:
+            self.train_steps.append(state.global_step)
+            self.train_losses.append(logs["loss"])
+            self._render()
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        if metrics and "eval_val_source_loss" in metrics:
+            self.eval_steps.append(state.global_step)
+            self.val_indist.append(metrics.get("eval_val_indist_loss", float("nan")))
+            self.val_source.append(metrics.get("eval_val_source_loss", float("nan")))
+            self.val_topic.append(metrics.get("eval_val_topic_loss",  float("nan")))
+            self._render()
+
+    def _render(self) -> None:
+        fig, ax = plt.subplots(figsize=(10, 5))
+
+        if self.train_steps:
+            ax.plot(self.train_steps, self.train_losses,
+                    color="#888", lw=0.9, alpha=0.6, label="train loss")
+
+        if self.eval_steps:
+            ax.plot(self.eval_steps, self.val_indist,
+                    "o--", color="#e07b39", lw=1.6, ms=5, label="val_indist")
+            ax.plot(self.eval_steps, self.val_source,
+                    "s-",  color="#2a6ebb", lw=1.6, ms=5, label="val_source")
+            ax.plot(self.eval_steps, self.val_topic,
+                    "^:",  color="#3aa86a", lw=1.6, ms=5, label="val_topic")
+
+        ax.set_xlabel("step")
+        ax.set_ylabel("cross-entropy loss")
+        ax.set_title(self.title)
+        ax.legend(fontsize=8)
+        ax.grid(axis="y", lw=0.4, alpha=0.5)
+
+        plt.tight_layout()
+        plt.savefig(self.save_path, dpi=100, bbox_inches="tight")
+        plt.close(fig)
 
 
 class GenerationCallback(TrainerCallback):
-    """Generates text from fixed prompts at the end of each training epoch."""
+    """Generates text from fixed prompts once per epoch."""
 
     def __init__(
         self,
@@ -535,17 +618,15 @@ class GenerationCallback(TrainerCallback):
         self.generation_params = generation_params
         self.tokenizer         = tokenizer
         self.quadrant          = quadrant
-        self.log_path = log_path
+        self.log_path          = log_path
+        self._last_epoch       = -1
 
-    def on_epoch_end(
-        self,
-        args: Any,
-        state: Any,
-        control: Any,
-        **kwargs: Any,
-    ) -> None:
-        if not self.generation_params.enabled:
+    def on_evaluate(self, args, state, control, **kwargs):
+        # only run once per epoch (on_evaluate fires at eval_steps, not epoch_end)
+        epoch = math.floor(state.epoch)
+        if epoch == self._last_epoch or not self.generation_params.enabled:
             return
+        self._last_epoch = epoch
 
         model = kwargs.get("model")
         if model is None:
@@ -553,11 +634,9 @@ class GenerationCallback(TrainerCallback):
 
         model.eval()
         entries: list[dict] = []
-
         for prompt in self.prompts:
             inputs = self.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
             inputs = {k: v.to(_input_device(model)) for k, v in inputs.items()}
-
             gen_kwargs: dict[str, Any] = {
                 "max_new_tokens": self.generation_params.max_new_tokens,
                 "do_sample": self.generation_params.do_sample,
@@ -567,37 +646,27 @@ class GenerationCallback(TrainerCallback):
                 gen_kwargs["temperature"] = self.generation_params.temperature
             else:
                 gen_kwargs["temperature"] = None
-                gen_kwargs["top_p"] = None
-
+                gen_kwargs["top_p"]       = None
             with torch.no_grad():
                 output_ids = model.generate(**inputs, **gen_kwargs)
-
             prompt_len     = inputs["input_ids"].shape[1]
-            generated_ids  = output_ids[0, prompt_len:]
-            generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-
+            generated_text = self.tokenizer.decode(
+                output_ids[0, prompt_len:], skip_special_tokens=True
+            )
             entries.append({
-                "epoch": state.epoch,
+                "epoch": epoch,
                 "global_step": state.global_step,
                 "quadrant": self.quadrant,
                 "prompt": prompt,
                 "generated_text": generated_text,
             })
-
         model.train()
 
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a", encoding="utf-8") as fh:
-            for entry in entries:
-                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-        log.info("generation logged for epoch %.0f — %d prompts", state.epoch, len(self.prompts))
-
-
-# === GENERATION ===
-
-
-# === EVALUATION ===
+            for e in entries:
+                fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+        log.info("generation logged for epoch %d — %d prompts", epoch, len(self.prompts))
 
 
 # === TRAINING ===
@@ -609,51 +678,38 @@ def run_training(
     output_dir: Path,
     dry_run: bool = False,
 ) -> dict:
-    """
-    Run one complete training run for one quadrant at one seed.
-
-    Args:
-        quadrant:   one of the four quadrant names
-        seed:       random seed for this run
-        config:     full ExpertConfig
-        output_dir: output directory for this run (quadrant/seed already included)
-        dry_run:    if True, build all objects and run one forward pass but skip training
-
-    Returns:
-        Summary dict with quadrant, seed, best_val_source_loss, final_train_loss,
-        total_steps, total_time_seconds, and config snapshot.
-
-    Logic:
-        Loads model and tokenizer, tokenizes all four splits, initialises callbacks,
-        builds TrainingArguments and Trainer, then trains. After training, identifies
-        the best checkpoint by val_source_loss from callback logs and copies that
-        checkpoint directory to output_dir/best/.
-    """
     t_start = time.time()
     set_seed(seed)
 
-    # remove stale artifacts so re-runs start clean
     for stale_ckpt in output_dir.glob("checkpoint-*"):
         shutil.rmtree(stale_ckpt)
         log.info("removed stale checkpoint %s", stale_ckpt.name)
-    for stale_log in [output_dir / "train_log.jsonl", output_dir / "generation_log.jsonl"]:
-        if stale_log.exists():
-            stale_log.unlink()
-            log.info("removed stale %s", stale_log.name)
+    for stale in [output_dir / "train_log.jsonl", output_dir / "generation_log.jsonl"]:
+        if stale.exists():
+            stale.unlink()
 
     model, tokenizer = build_lora_model(config.base_model, config.lora, config.precision)
-
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params     = sum(p.numel() for p in model.parameters())
 
-    data_dir = config.train_validate_dir / quadrant
+    data_dir     = config.train_validate_dir / quadrant
     train_chunks  = load_split(data_dir / "train.jsonl")
     indist_chunks = load_split(data_dir / "val_indist.jsonl")
     source_chunks = load_split(data_dir / "val_source.jsonl")
     topic_chunks  = load_split(data_dir / "val_topic.jsonl")
 
+    # compute source-group weights for training examples only
+    train_weights: list[float] | None = None
+    if config.weighting.enabled:
+        log.info("computing source-group weights for %s train set:", quadrant)
+        train_weights = compute_source_group_weights(
+            train_chunks,
+            config.weighting.source_groups,
+            max_cap=config.weighting.max_weight_cap,
+        )
+
     log.info("tokenizing splits for quadrant=%s", quadrant)
-    train_dataset      = tokenize_chunks(train_chunks,  tokenizer)
+    train_dataset      = tokenize_chunks(train_chunks,  tokenizer, weights=train_weights)
     val_indist_dataset = tokenize_chunks(indist_chunks, tokenizer)
     val_source_dataset = tokenize_chunks(source_chunks, tokenizer)
     val_topic_dataset  = tokenize_chunks(topic_chunks,  tokenizer)
@@ -664,18 +720,35 @@ def run_training(
         len(val_source_dataset), len(val_topic_dataset),
     )
 
-    data_collator = build_data_collator(tokenizer)
+    # compute eval_steps so we get exactly evals_per_epoch checkpoints per epoch
+    effective_batch    = (config.training.per_device_train_batch_size *
+                          config.training.gradient_accumulation_steps)
+    steps_per_epoch    = math.ceil(len(train_dataset) / effective_batch)
+    eval_steps         = max(1, steps_per_epoch // config.evaluation.evals_per_epoch)
+    log.info("steps_per_epoch=%d  eval_steps=%d", steps_per_epoch, eval_steps)
 
-    multi_split_callback = MultiSplitEvalCallback(
+    data_collator = (
+        WeightedDataCollator(tokenizer=tokenizer, mlm=False)
+        if config.weighting.enabled
+        else DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    )
+
+    best_ckpt_path = output_dir / "best"
+    multi_split_cb = MultiSplitEvalCallback(
         val_indist_dataset=val_indist_dataset,
         val_source_dataset=val_source_dataset,
         val_topic_dataset=val_topic_dataset,
         tokenizer=tokenizer,
         log_path=output_dir / "train_log.jsonl",
-        early_stopping_patience=config.evaluation.early_stopping_patience,
+        best_ckpt_path=best_ckpt_path,
         precision=config.precision,
     )
-    generation_callback = GenerationCallback(
+    plot_cb = LearningCurvePlotCallback(
+        save_path=output_dir / "learning_curve.png",
+        quadrant=quadrant,
+        seed=seed,
+    )
+    generation_cb = GenerationCallback(
         prompts=config.generation.fixed_prompts,
         generation_params=config.generation,
         tokenizer=tokenizer,
@@ -697,10 +770,12 @@ def run_training(
         tf32=config.training.tf32,
         gradient_checkpointing=config.training.gradient_checkpointing,
         dataloader_num_workers=config.training.dataloader_num_workers,
-        eval_strategy=config.evaluation.eval_strategy,
-        save_strategy=config.evaluation.save_strategy,
+        eval_strategy="steps",
+        eval_steps=eval_steps,
+        save_strategy="steps",
+        save_steps=eval_steps,
         save_total_limit=config.evaluation.save_total_limit,
-        load_best_model_at_end=False,   # best checkpoint loaded manually below
+        load_best_model_at_end=False,
         metric_for_best_model=config.evaluation.metric_for_best_model,
         greater_is_better=config.evaluation.greater_is_better,
         logging_steps=config.logging_steps,
@@ -711,96 +786,70 @@ def run_training(
         max_grad_norm=1.0,
     )
 
-    trainer = Trainer(
+    TrainerClass = WeightedTrainer if config.weighting.enabled else Trainer
+    trainer = TrainerClass(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_indist_dataset,
         data_collator=data_collator,
-        callbacks=[
-            multi_split_callback,   # must precede any metric-dependent callbacks
-            generation_callback,
-        ],
+        callbacks=[multi_split_cb, plot_cb, generation_cb],
     )
 
     if dry_run:
         log.info("=== dry run — skipping trainer.train() ===")
         log.info(
-            "train=%d  val_indist=%d  val_source_sub=%d  val_topic_sub=%d",
+            "train=%d  val_indist=%d  val_source_sub=%d  val_topic_sub=%d  eval_steps=%d",
             len(train_dataset), len(val_indist_dataset),
-            len(multi_split_callback.val_source_sub),
-            len(multi_split_callback.val_topic_sub),
+            len(multi_split_cb.val_source_sub), len(multi_split_cb.val_topic_sub),
+            eval_steps,
         )
-        assert len(multi_split_callback.val_source_sub) > 0, "val_source subsample is empty"
-        assert len(multi_split_callback.val_topic_sub)  > 0, "val_topic subsample is empty"
-        log.info("callback subsamples verified ok")
+        assert len(multi_split_cb.val_source_sub) > 0
+        assert len(multi_split_cb.val_topic_sub)  > 0
 
-        batch = data_collator([train_dataset[i] for i in range(min(2, len(train_dataset)))])
-        batch = {k: v.to(_input_device(model)) for k, v in batch.items()}
+        example_batch = [train_dataset[i] for i in range(min(2, len(train_dataset)))]
+        batch = data_collator(example_batch)
+        batch = {k: v.to(_input_device(model)) for k, v in batch.items() if isinstance(v, torch.Tensor)}
         with torch.no_grad():
-            outputs = model(**batch)
+            outputs = model(**{k: v for k, v in batch.items() if k != "weight"})
         loss_val = outputs.loss.item()
-        assert not math.isnan(loss_val), "dry-run forward pass returned NaN loss"
-        assert loss_val > 0, "dry-run forward pass returned zero loss"
-        log.info("forward pass ok — loss=%.4f", loss_val)
+        assert not math.isnan(loss_val) and loss_val > 0, f"dry-run forward pass loss={loss_val}"
+        log.info("forward pass ok — loss=%.4f  weighted_training=%s", loss_val, config.weighting.enabled)
         return {"quadrant": quadrant, "seed": seed, "dry_run": True, "forward_pass_loss": loss_val}
 
     log.info("starting training: quadrant=%s  seed=%d", quadrant, seed)
     trainer.train()
 
-    # copy best checkpoint by val_source_loss; match by nearest global_step in case
-    # step numbers at on_evaluate time don't align perfectly with saved checkpoint names
-    best_dir  = output_dir / "best"
-    ckpt_dirs = sorted(
-        output_dir.glob("checkpoint-*"),
-        key=lambda p: int(p.name.split("-")[-1]),
+    # best adapter was saved incrementally by MultiSplitEvalCallback — just record metadata
+    best_record = (
+        min(multi_split_cb.eval_logs, key=lambda r: r["mean_val_loss"])
+        if multi_split_cb.eval_logs else {}
     )
-
-    if multi_split_callback.epoch_logs and ckpt_dirs:
-        best_epoch_record = min(
-            multi_split_callback.epoch_logs, key=lambda r: r["val_source_loss"]
-        )
-        target_step = best_epoch_record["global_step"]
-        best_ckpt = min(ckpt_dirs, key=lambda p: abs(int(p.name.split("-")[-1]) - target_step))
-        if best_dir.exists():
-            shutil.rmtree(best_dir)
-        shutil.copytree(best_ckpt, best_dir)
-        tokenizer.save_pretrained(str(best_dir))
-        log.info(
-            "copied %s → best/ (epoch %.0f  val_source_loss=%.4f)",
-            best_ckpt.name, best_epoch_record["epoch"], best_epoch_record["val_source_loss"],
-        )
-    else:
-        best_epoch_record = multi_split_callback.epoch_logs[-1] if multi_split_callback.epoch_logs else {}
-        if not ckpt_dirs:
-            log.warning("no checkpoint dirs found — saving current model weights")
-        best_dir.mkdir(parents=True, exist_ok=True)
-        model.save_pretrained(str(best_dir))
-        tokenizer.save_pretrained(str(best_dir))
-
-    log.info("best adapter saved to %s", best_dir)
-
-    total_time = time.time() - t_start
 
     train_entries    = [e for e in trainer.state.log_history if "loss" in e and "eval_loss" not in e]
     final_train_loss = train_entries[-1]["loss"] if train_entries else float("nan")
+    total_time       = time.time() - t_start
 
     summary = {
-        "quadrant": quadrant,
-        "seed": seed,
-        "base_model": config.base_model,
-        "trainable_params": trainable_params,
-        "total_params": total_params,
-        "best_epoch": best_epoch_record.get("epoch", -1),
-        "best_val_source_loss": best_epoch_record.get("val_source_loss", float("nan")),
-        "best_val_indist_loss": best_epoch_record.get("val_indist_loss", float("nan")),
-        "final_train_loss": final_train_loss,
-        "total_steps": trainer.state.global_step,
-        "total_time_seconds": round(total_time, 1),
-        "best_checkpoint": str(best_dir),
-        "best_metric": "val_source_loss",
+        "quadrant":            quadrant,
+        "seed":                seed,
+        "base_model":          config.base_model,
+        "trainable_params":    trainable_params,
+        "total_params":        total_params,
+        "best_step":           best_record.get("global_step", -1),
+        "best_epoch":          best_record.get("epoch", -1),
+        "best_mean_val_loss":  best_record.get("mean_val_loss", float("nan")),
+        "best_val_source_loss":best_record.get("val_source_loss", float("nan")),
+        "best_val_indist_loss":best_record.get("val_indist_loss", float("nan")),
+        "best_val_topic_loss": best_record.get("val_topic_loss", float("nan")),
+        "final_train_loss":    final_train_loss,
+        "total_steps":         trainer.state.global_step,
+        "total_time_seconds":  round(total_time, 1),
+        "best_checkpoint":     str(best_ckpt_path),
+        "best_metric":         "mean_val_loss",
+        "weighted_training":   config.weighting.enabled,
         "config": {
-            "lora": asdict(config.lora),
+            "lora":     asdict(config.lora),
             "training": asdict(config.training),
         },
     }
@@ -817,43 +866,19 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="train one LoRA expert adapter for a given political quadrant"
     )
-    p.add_argument(
-        "--quadrant",
-        required=True,
-        choices=VALID_QUADRANTS,
-        help="quadrant to train: right_auth, left_auth, left_lib, right_lib",
-    )
-    p.add_argument(
-        "--config",
-        type=Path,
-        default=CONFIG_PATH,
-        help="path to config.yaml (default: project root config/config.yaml)",
-    )
-    p.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="single seed to run — overrides config.seeds",
-    )
-    p.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="build all objects and run one forward pass — do not train",
-    )
-    p.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help="override config output_dir",
-    )
+    p.add_argument("--quadrant", required=True, choices=VALID_QUADRANTS)
+    p.add_argument("--config",   type=Path, default=CONFIG_PATH)
+    p.add_argument("--seed",     type=int, default=None,
+                   help="single seed — overrides config.seeds")
+    p.add_argument("--dry-run",  action="store_true")
+    p.add_argument("--output-dir", type=Path, default=None)
     return p.parse_args()
 
 
 def main() -> None:
     t_total = time.time()
-    args = parse_args()
-
-    config = load_config(args.config)
+    args    = parse_args()
+    config  = load_config(args.config)
     log.info("config loaded from %s", args.config)
 
     output_root = args.output_dir if args.output_dir is not None else config.output_dir
@@ -886,24 +911,25 @@ def main() -> None:
         )
         summaries.append(summary)
         log.info(
-            "finished seed=%d — best_val_source_loss=%.4f  time=%.0fs",
+            "finished seed=%d — best_mean_val=%.4f  time=%.0fs",
             seed,
-            summary.get("best_val_source_loss", float("nan")),
+            summary.get("best_mean_val_loss", float("nan")),
             summary.get("total_time_seconds", 0.0),
         )
 
     if len(seeds) > 1 and not args.dry_run:
-        best = min(summaries, key=lambda s: s.get("best_val_source_loss", float("inf")))
+        best = min(summaries, key=lambda s: s.get("best_mean_val_loss", float("inf")))
         log.info(
-            "best seed for %s: seed=%d  val_source_loss=%.4f",
-            quadrant, best["seed"], best["best_val_source_loss"],
+            "best seed for %s: seed=%d  mean_val_loss=%.4f",
+            quadrant, best["seed"], best["best_mean_val_loss"],
         )
         best_seed_summary = {
-            "quadrant": quadrant,
-            "seeds_run": seeds,
-            "best_seed": best["seed"],
-            "best_val_source_loss": best["best_val_source_loss"],
-            "all_summaries": summaries,
+            "quadrant":            quadrant,
+            "seeds_run":           seeds,
+            "best_seed":           best["seed"],
+            "best_mean_val_loss":  best["best_mean_val_loss"],
+            "best_val_source_loss":best["best_val_source_loss"],
+            "all_summaries":       summaries,
         }
         summary_path = output_root / quadrant / "best_seed_summary.json"
         with summary_path.open("w", encoding="utf-8") as fh:

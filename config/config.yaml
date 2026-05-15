@@ -344,11 +344,11 @@ train_experts:
     r: 8
     lora_alpha: 16
     lora_dropout: 0.1
-    target_modules: [q_proj, v_proj]  # more conservative LoRA config, next to add would be o_proj
+    target_modules: [q_proj, v_proj]
     bias: "none"
     task_type: "CAUSAL_LM"
   training:
-    num_train_epochs: 3
+    num_train_epochs: 5
     per_device_train_batch_size: 4
     gradient_accumulation_steps: 4
     learning_rate: 8.0e-5
@@ -356,18 +356,22 @@ train_experts:
     warmup_ratio: 0.10
     weight_decay: 0.01
     bf16: true
-    tf32: true                    # H100-specific: enables TF32 for matmuls, faster
-    gradient_checkpointing: false # not needed on H100 at this scale
+    tf32: true
+    gradient_checkpointing: false
     dataloader_num_workers: 4
     remove_unused_columns: false
   evaluation:
-    eval_strategy: "epoch"
-    save_strategy: "epoch"
-    save_total_limit: 3           # keep all 3 epoch checkpoints (one per epoch)
-    load_best_model_at_end: false
-    metric_for_best_model: "eval_val_source_loss"
+    evals_per_epoch: 4            # eval steps = steps_per_epoch // evals_per_epoch
+    save_total_limit: 1           # only keep the single most-recent checkpoint (crash recovery)
+    metric_for_best_model: "mean_val_loss"   # (val_indist + val_source + val_topic) / 3
     greater_is_better: false
-    early_stopping_patience: 1
+  weighting:
+    enabled: true
+    max_weight_cap: 3.0           # inverse-frequency source-group weights, capped here
+    source_groups:
+      reddit:   [reddit_liberal, reddit_conservative]
+      press:    [allsides, ec_press, ire_press, uk_press, us_media]
+      speeches: [hoc, us_speeches]
   generation:
     enabled: true
     max_new_tokens: 100
@@ -380,7 +384,7 @@ train_experts:
       - "Answer directly in 120 words: How should governments protect civil liberties?"
   logging:
     logging_steps: 10
-    report_to: "tensorboard"
+    report_to: "none"             # tensorboard replaced by live PNG; saves disk space
   seeds: [42, 123, 456]
   paths:
     train_validate_dir: "data/experts/train-validate"

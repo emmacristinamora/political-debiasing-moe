@@ -221,6 +221,8 @@ def build_engine(
         convergence_threshold=float(ecfg["convergence_threshold"]),
         initialization_mode=str(ecfg["initialization_mode"]),
         keep_edit_trace=bool(ecfg["keep_edit_trace"]),
+        stop_on_axis_proximity=bool(ecfg["stop_on_axis_proximity"]),
+        axis_proximity_threshold=float(ecfg["axis_proximity_threshold"]),
     )
 
     # --temperature overrides the config: a value > 0 switches expert
@@ -342,6 +344,7 @@ def serialize_result(
         },
         "num_edit_steps": int(metadata.get("num_edit_steps", editor_result.num_steps_run)),
         "stopped_early": bool(metadata.get("stopped_early", editor_result.stopped_early)),
+        "stop_reason": editor_result.stop_reason,
         # full per-cycle editor trace (alpha/delta/alignment plus the
         # candidate final answer's compass coordinates); empty unless
         # EditorConfig.keep_edit_trace is enabled
@@ -395,7 +398,8 @@ def format_stdout_summary(prompt_id: str | None, result: Any) -> str:
         f"policy:        {_format_mapping(router_state.calibrated_policy)}",
         f"final_alpha:   {_format_mapping(editor_result.final_alpha)}",
         f"edit_steps:    {editor_result.num_steps_run}  "
-        f"stopped_early={editor_result.stopped_early}",
+        f"stopped_early={editor_result.stopped_early}  "
+        f"stop_reason={editor_result.stop_reason}",
     ]
     # per-cycle compass coordinates of the candidate final answer
     for trace in editor_result.step_traces:

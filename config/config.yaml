@@ -526,12 +526,17 @@ moce_inference:
     center_threshold: 0.05
 
   editor:
-    max_edit_steps: 1
+    max_edit_steps: 10
     correction_beta: 1.0
     initialization_mode: router_policy
     use_recursive_editing: true
     initialize_from_router: true
     convergence_threshold: 1.0e-3
+    # stop recursive editing once the candidate answer's compass point lands
+    # in the cross-shaped neutral zone: within axis_proximity_threshold of an
+    # axis, i.e. min(|economic_score|, |social_score|) <= threshold
+    stop_on_axis_proximity: true
+    axis_proximity_threshold: 0.015
     # keep_edit_trace: record one EditorStepTrace per cycle (alpha/delta/
     # alignment plus the candidate answer's compass coordinates). Required
     # for the editor_trace field in src/10_run_moce.py's JSONL output.

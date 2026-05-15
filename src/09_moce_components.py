@@ -143,15 +143,22 @@ class EditorConfig:
     Allowed values are exactly {"router_policy", "uniform"}.
 
     Notes:
-    - v1 should default to one update step
-    - multi-step recursion should remain available for later experimentation
+    - max_edit_steps defaults to 10: recursive editing is the intended mode,
+      relying on the early-stop conditions below to terminate well before
+      the budget is exhausted. Set max_edit_steps=1 for a single-step pass.
+    - recursive editing stops early on either of two conditions: convergence
+      (alpha and alignment both move less than convergence_threshold) or
+      axis proximity (the candidate answer's compass point lands within
+      axis_proximity_threshold of an axis -- the cross-shaped neutral zone)
     """
 
-    max_edit_steps: int = 1
+    max_edit_steps: int = 10
     use_recursive_editing: bool = True
     initialize_from_router: bool = True
     correction_beta: float = 1.0
     convergence_threshold: float = 1e-3
+    stop_on_axis_proximity: bool = True
+    axis_proximity_threshold: float = 0.015
     stop_on_small_weight_change: bool = True
     rescore_current_mixture: bool = True
     keep_edit_trace: bool = True
@@ -339,9 +346,12 @@ class EditorResult:
     - the editor returns hidden-state mixing artifacts only; decoding the
       final hidden state into text is owned by MoCEEngine.run
     - stop_reason is None when the loop exited because max_edit_steps was
-      reached without an early-stop condition firing; the only early-stop
-      reason currently emitted is "converged" (both max_alpha_change and
-      max_alignment_change at or below EditorConfig.convergence_threshold)
+      reached without an early-stop condition firing. Two early-stop reasons
+      are emitted: "axis_proximity" (the candidate answer's compass point
+      reached the cross-shaped neutral zone within
+      EditorConfig.axis_proximity_threshold of an axis) and "converged"
+      (both max_alpha_change and max_alignment_change at or below
+      EditorConfig.convergence_threshold)
     """
 
     final_mixed_hidden_state: torch.Tensor
@@ -2740,6 +2750,20 @@ class Editor:
                 f"got {correction_beta!r}"
             )
 
+        axis_proximity_threshold = config.axis_proximity_threshold
+        if (
+            not isinstance(axis_proximity_threshold, (int, float))
+            or isinstance(axis_proximity_threshold, bool)
+            or math.isnan(axis_proximity_threshold)
+            or math.isinf(axis_proximity_threshold)
+            or axis_proximity_threshold < 0
+        ):
+            raise ValueError(
+                "EditorConfig.axis_proximity_threshold must be a finite, "
+                "non-negative int or float, "
+                f"got {axis_proximity_threshold!r}"
+            )
+
         self.model = model
         self.tokenizer = tokenizer
         self.input_transformer = input_transformer
@@ -3497,11 +3521,18 @@ class Editor:
         - use_recursive_editing=False: run exactly 1 step (max_edit_steps
           ignored). Terminal state has stopped_early=False, stop_reason=None.
         - use_recursive_editing=True: run up to max_edit_steps. After each
-          step, stop early if both max_alpha_change <= convergence_threshold
-          and max_alignment_change <= convergence_threshold, with
-          stopped_early=True and stop_reason="converged". Exhausting the
-          budget without convergence yields stopped_early=False,
-          stop_reason=None.
+          step, stop early on either of two conditions:
+          * axis proximity (checked first, only when stop_on_axis_proximity):
+            the candidate answer's compass point lands within
+            axis_proximity_threshold of an axis, i.e.
+            min(|economic_score|, |social_score|) <= axis_proximity_threshold.
+            This is the cross-shaped neutral zone around the two axes;
+            stop_reason="axis_proximity".
+          * convergence: both max_alpha_change <= convergence_threshold and
+            max_alignment_change <= convergence_threshold;
+            stop_reason="converged".
+          Either sets stopped_early=True. Exhausting the budget without an
+          early stop yields stopped_early=False, stop_reason=None.
 
         Returns:
         - EditorResult populated with final_mixed_hidden_state, final_alpha
@@ -3575,13 +3606,25 @@ class Editor:
             current_alignment = alignment_next
             num_steps_run = step_index + 1
 
-            if self.config.use_recursive_editing and (
-                max_alpha_change <= self.config.convergence_threshold
-                and max_alignment_change <= self.config.convergence_threshold
-            ):
-                stopped_early = True
-                stop_reason = "converged"
-                break
+            if self.config.use_recursive_editing:
+                # axis proximity: the candidate answer's compass point sits in
+                # the cross-shaped neutral zone, within axis_proximity_threshold
+                # of either axis (economic == 0 or social == 0)
+                near_axis = self.config.stop_on_axis_proximity and (
+                    min(
+                        abs(mixture_scores["economic_score"]),
+                        abs(mixture_scores["social_score"]),
+                    )
+                    <= self.config.axis_proximity_threshold
+                )
+                converged = (
+                    max_alpha_change <= self.config.convergence_threshold
+                    and max_alignment_change <= self.config.convergence_threshold
+                )
+                if near_axis or converged:
+                    stopped_early = True
+                    stop_reason = "axis_proximity" if near_axis else "converged"
+                    break
 
         # max_steps >= 1 is enforced above, so the loop ran at least once and
         # mixed_hidden_state / current_alpha / current_alignment are bound.
@@ -4041,5 +4084,6 @@ class MoCEEngine:
                 "decode_callable": "decode_editor_result",
                 "num_edit_steps":  int(editor_result.num_steps_run),
                 "stopped_early":   bool(editor_result.stopped_early),
+                "stop_reason":     editor_result.stop_reason,
             },
         )

@@ -40,8 +40,8 @@ NEUTRAL_PROMPTS="data/smoke_test_prompts.jsonl"
 
 # ── sanity checks ──────────────────────────────────────────────────────────────
 
-if [ ! -f "src/11_evaluation.py" ]; then
-  echo "[error] src/11_evaluation.py not found — aborting"
+if [ ! -f "src/11_moce_evaluation.py" ]; then
+  echo "[error] src/11_moce_evaluation.py not found — aborting"
   exit 1
 fi
 
@@ -87,7 +87,7 @@ echo "[info] all pre-flight checks passed"
 
 echo "[info] running routing-diagnostic"
 
-python -u src/11_evaluation.py routing-diagnostic \
+python -u src/11_moce_evaluation.py routing-diagnostic \
   --config        config/config.yaml \
   --prompts-file  "$CHARGED_PROMPTS" \
   --prompts-file  "$NEUTRAL_PROMPTS" \
@@ -100,7 +100,7 @@ python -u src/11_evaluation.py routing-diagnostic \
 
 echo "[info] running bias-radius (systems: base, moce, moce-single-step)"
 
-python -u src/11_evaluation.py bias-radius \
+python -u src/11_moce_evaluation.py bias-radius \
   --config        config/config.yaml \
   --prompts-file  "$CHARGED_PROMPTS" \
   --device        cuda

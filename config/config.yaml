@@ -532,7 +532,14 @@ moce_inference:
     use_recursive_editing: true
     initialize_from_router: true
     convergence_threshold: 1.0e-3
+    # keep_edit_trace: record one EditorStepTrace per cycle (alpha/delta/
+    # alignment plus the candidate answer's compass coordinates). Required
+    # for the editor_trace field in src/10_run_moce.py's JSONL output.
+    keep_edit_trace: true
 
+  # generation defaults; --temperature / --top-p / --seed on the
+  # src/10_run_moce.py CLI override temperature and top_p at runtime
+  # (a CLI temperature > 0 also flips do_sample on).
   generation:
     max_new_tokens: 256
     temperature: 0.7

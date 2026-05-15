@@ -220,6 +220,7 @@ def build_engine(
         correction_beta=float(ecfg["correction_beta"]),
         convergence_threshold=float(ecfg["convergence_threshold"]),
         initialization_mode=str(ecfg["initialization_mode"]),
+        keep_edit_trace=bool(ecfg["keep_edit_trace"]),
     )
 
     # --temperature overrides the config: a value > 0 switches expert
@@ -341,12 +342,41 @@ def serialize_result(
         },
         "num_edit_steps": int(metadata.get("num_edit_steps", editor_result.num_steps_run)),
         "stopped_early": bool(metadata.get("stopped_early", editor_result.stopped_early)),
+        # full per-cycle editor trace (alpha/delta/alignment plus the
+        # candidate final answer's compass coordinates); empty unless
+        # EditorConfig.keep_edit_trace is enabled
+        "editor_trace": [
+            _serialize_step_trace(trace) for trace in editor_result.step_traces
+        ],
     }
 
 
 def _format_mapping(mapping: dict[str, float]) -> str:
     """Format a canonical-quadrant mapping as 'k=0.xxx' joined by commas."""
     return ", ".join(f"{k}={v:.3f}" for k, v in mapping.items())
+
+
+def _serialize_step_trace(trace: Any) -> dict[str, Any]:
+    """
+    Convert one EditorStepTrace into a JSON-safe dict.
+
+    Carries the full per-cycle trace: the alpha/delta/alignment mappings,
+    the scalar movement summaries, and the candidate final answer's compass
+    coordinates (economic/social/bias) for that cycle.
+    """
+    return {
+        "step_index": int(trace.step_index),
+        "alpha_before": {k: float(v) for k, v in trace.alpha_before.items()},
+        "delta": {k: float(v) for k, v in trace.delta.items()},
+        "alpha_after": {k: float(v) for k, v in trace.alpha_after.items()},
+        "alignment_before": {k: float(v) for k, v in trace.alignment_before.items()},
+        "alignment_after": {k: float(v) for k, v in trace.alignment_after.items()},
+        "max_alpha_change": float(trace.max_alpha_change),
+        "max_alignment_change": float(trace.max_alignment_change),
+        "economic_score": float(trace.economic_score),
+        "social_score": float(trace.social_score),
+        "bias_magnitude": float(trace.bias_magnitude),
+    }
 
 
 def format_stdout_summary(prompt_id: str | None, result: Any) -> str:
@@ -367,6 +397,13 @@ def format_stdout_summary(prompt_id: str | None, result: Any) -> str:
         f"edit_steps:    {editor_result.num_steps_run}  "
         f"stopped_early={editor_result.stopped_early}",
     ]
+    # per-cycle compass coordinates of the candidate final answer
+    for trace in editor_result.step_traces:
+        lines.append(
+            f"  step {trace.step_index}:    "
+            f"econ={trace.economic_score:+.3f}  soc={trace.social_score:+.3f}  "
+            f"bias={trace.bias_magnitude:.3f}"
+        )
     return "\n".join(lines)
 
 

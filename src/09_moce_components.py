@@ -300,6 +300,11 @@ class EditorStepTrace:
     - mixture alignment before and after re-aggregation
     - scalar summaries of weight and alignment movement, useful for
       stop diagnostics and post-hoc inspection
+    - compass coordinates of the candidate final answer at this step:
+      economic_score / social_score / bias_magnitude of the mixed hidden
+      state produced after the alpha update. If the loop stopped here this
+      mixed state is what gets decoded, so the coordinates trace the
+      candidate answer's path through compass space across iterations.
 
     Notes:
     - this trace is intentionally lightweight: dict-of-float scalars only.
@@ -314,6 +319,9 @@ class EditorStepTrace:
     alignment_after: dict[str, float]
     max_alpha_change: float
     max_alignment_change: float
+    economic_score: float
+    social_score: float
+    bias_magnitude: float
 
 
 @dataclass
@@ -3557,6 +3565,9 @@ class Editor:
                         alignment_after=dict(alignment_next),
                         max_alpha_change=float(max_alpha_change),
                         max_alignment_change=float(max_alignment_change),
+                        economic_score=float(mixture_scores["economic_score"]),
+                        social_score=float(mixture_scores["social_score"]),
+                        bias_magnitude=float(mixture_scores["bias_magnitude"]),
                     )
                 )
 

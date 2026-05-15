@@ -1081,9 +1081,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--projection-layer",
         type=int,
-        default=16,
+        default=20,
         help="hidden-state layer index for PCT projection (0=embeddings, N=layerN output); "
-             "Mistral-7B has 33 states (0..32), default=16 (mid-network)",
+             "Mistral-7B has 33 states (0..32), default=20 (mid-network)",
     )
 
     # Adapter paths — omit any to skip that expert

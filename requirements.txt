@@ -29,3 +29,5 @@ tqdm>=4.66
 # === evaluation ===
 sentence-transformers
 matplotlib>=3.8
+# external llm-as-judge (src/12_judge_evaluation.py) uses a local Llama instruct
+# model via transformers — no extra dependency beyond the LLM-loading block above

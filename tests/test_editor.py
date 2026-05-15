@@ -136,9 +136,13 @@ def _make_prompt_state(
 
 def _make_expert_outputs(
     tensors_by_quadrant: dict[str, torch.Tensor] | None = None,
-    shape: tuple[int, ...] = (4,),
-    fill: float = 0.0,
+    shape: tuple[int, ...] = (3, 4),
+    fill: float = 1.0,
 ) -> dict[str, ExpertOutput]:
+    # default hidden_output is rank-2 [seq_len, hidden_dim], matching the
+    # ExpertManager contract _validate_expert_outputs enforces. fill is
+    # non-zero so the mixed hidden state has a positive L2 norm and
+    # score_current_mixture can normalize it.
     if tensors_by_quadrant is None:
         tensors_by_quadrant = {
             key: torch.full(shape, fill) for key in CANONICAL_QUADRANT_ORDER
@@ -243,8 +247,8 @@ class ValidationFailureTests(unittest.TestCase):
 
     def test_expert_tensors_shape_mismatch_raises(self) -> None:
         editor = _default_editor()
-        tensors = {key: torch.zeros(4) for key in CANONICAL_QUADRANT_ORDER}
-        tensors["right_auth"] = torch.zeros(8)
+        tensors = {key: torch.zeros(3, 4) for key in CANONICAL_QUADRANT_ORDER}
+        tensors["right_auth"] = torch.zeros(3, 8)
         with self.assertRaises(ValueError):
             editor.run_editing_loop(
                 "p",
@@ -335,10 +339,10 @@ class HiddenStateFusionTests(unittest.TestCase):
     def test_weighted_sum_matches_expected(self) -> None:
         editor = _default_editor()
         tensors = {
-            "left_lib":   torch.tensor([1.0, 0.0, 0.0, 0.0]),
-            "left_auth":  torch.tensor([0.0, 2.0, 0.0, 0.0]),
-            "right_lib":  torch.tensor([0.0, 0.0, 3.0, 0.0]),
-            "right_auth": torch.tensor([0.0, 0.0, 0.0, 4.0]),
+            "left_lib":   torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+            "left_auth":  torch.tensor([[0.0, 2.0, 0.0, 0.0]]),
+            "right_lib":  torch.tensor([[0.0, 0.0, 3.0, 0.0]]),
+            "right_auth": torch.tensor([[0.0, 0.0, 0.0, 4.0]]),
         }
         alpha = {
             "left_lib": 0.4,
@@ -350,7 +354,7 @@ class HiddenStateFusionTests(unittest.TestCase):
             _make_expert_outputs(tensors_by_quadrant=tensors), alpha
         )
         expected = torch.tensor(
-            [0.4 * 1.0, 0.3 * 2.0, 0.2 * 3.0, 0.1 * 4.0]
+            [[0.4 * 1.0, 0.3 * 2.0, 0.2 * 3.0, 0.1 * 4.0]]
         )
         self.assertTrue(torch.allclose(mixed, expected, atol=1e-7))
 
@@ -363,8 +367,8 @@ class HiddenStateFusionTests(unittest.TestCase):
 
     def test_non_finite_expert_tensor_rejected(self) -> None:
         editor = _default_editor()
-        tensors = {key: torch.zeros(4) for key in CANONICAL_QUADRANT_ORDER}
-        tensors["left_lib"] = torch.tensor([0.0, float("nan"), 0.0, 0.0])
+        tensors = {key: torch.zeros(1, 4) for key in CANONICAL_QUADRANT_ORDER}
+        tensors["left_lib"] = torch.tensor([[0.0, float("nan"), 0.0, 0.0]])
         with self.assertRaises(ValueError):
             editor._mix_hidden_states(
                 _make_expert_outputs(tensors_by_quadrant=tensors),
@@ -453,7 +457,7 @@ class EditLoopTests(unittest.TestCase):
         max_edit_steps: int = 5,
         keep_edit_trace: bool = True,
     ) -> Editor:
-        # alignment -> [0,0,0,0] always, expert tensors are zeros, prompt
+        # the fake returns alignment -> [0,0,0,0] always and prompt
         # alignment is zero; alpha and alignment both freeze on step 1.
         fake = _FakeInputTransformer(
             quadrant_scores={key: 0.0 for key in CANONICAL_QUADRANT_ORDER},

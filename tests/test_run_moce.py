@@ -105,6 +105,9 @@ def _minimal_inference_block() -> dict[str, Any]:
             "use_recursive_editing": True,
             "initialize_from_router": True,
             "convergence_threshold": 1.0e-3,
+            "keep_edit_trace": True,
+            "stop_on_axis_proximity": True,
+            "axis_proximity_threshold": 0.015,
         },
         "generation": {
             "max_new_tokens": 256,
@@ -186,6 +189,7 @@ def _fake_result(
     final_alpha: dict[str, float] | None = None,
     num_steps_run: int = 1,
     stopped_early: bool = False,
+    stop_reason: str | None = None,
 ) -> Any:
     """Build a fake MoCEResult-shaped object for serializer/formatter tests."""
     uniform = {k: 0.25 for k in CANONICAL}
@@ -213,6 +217,8 @@ def _fake_result(
             final_alignment=alignment,
             num_steps_run=num_steps_run,
             stopped_early=stopped_early,
+            stop_reason=stop_reason,
+            step_traces=[],
         ),
         metadata={
             "num_edit_steps": num_steps_run,
@@ -479,6 +485,8 @@ class BuildEngineTests(unittest.TestCase):
             calibrated=False,
             router_checkpoint=None,
             calibration_input_dim=None,
+            temperature=None,
+            top_p=None,
         )
 
     def _calibrated_args(self, ckpt: Path, dim: int | None = None) -> SimpleNamespace:
@@ -486,6 +494,8 @@ class BuildEngineTests(unittest.TestCase):
             calibrated=True,
             router_checkpoint=ckpt,
             calibration_input_dim=dim,
+            temperature=None,
+            top_p=None,
         )
 
     def test_heuristic_default_wires_use_calibrated_false(self) -> None:

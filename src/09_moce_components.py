@@ -3702,10 +3702,11 @@ class MoCEEngine:
         At each generated position, the four experts' final-layer hidden
         states are mixed by editor_result.final_alpha into a single seed
         vector; the LM head turns that vector into logits over the
-        vocabulary; greedy argmax picks the next token; the chosen token
-        is fed to ExpertManager.step_all_experts_one_token to advance
-        every expert's KV cache for the next step. Generation stops on
-        EOS or at GenerationConfig.max_new_tokens.
+        vocabulary; the next token is chosen (greedy argmax, or
+        temperature/top-p sampling when GenerationConfig.do_sample is set);
+        the chosen token is fed to ExpertManager.step_all_experts_one_token
+        to advance every expert's KV cache for the next step. Generation
+        stops on EOS or at GenerationConfig.max_new_tokens.
 
         Inputs:
         - prompt_text, prompt_state, router_state: kept in the signature
@@ -3887,12 +3888,18 @@ class MoCEEngine:
     ) -> int:
         """
         Apply the LM head to a single mixed seed vector and return the
-        greedy-argmax token id.
+        next token id.
 
-        Greedy is deterministic — required for reproducible candidate
-        traces in the router-calibration runner. Argmax is taken in
-        float32 for numerical stability (bfloat16 argmax can tie or
-        skew on near-equal logits).
+        Decoding mode follows the active GenerationConfig:
+        - do_sample is False, or temperature <= 0: greedy argmax. Greedy is
+          deterministic — required for reproducible candidate traces in the
+          router-calibration runner.
+        - do_sample is True: temperature-scaled, top-p (nucleus) filtered
+          multinomial sampling. Seed the global torch RNG upstream for
+          reproducible sampled runs.
+
+        Logits are moved to float32 before selection for numerical stability
+        (bfloat16 argmax can tie or skew on near-equal logits).
         """
         if not isinstance(seed_vec, torch.Tensor):
             raise ValueError(
@@ -3912,7 +3919,49 @@ class MoCEEngine:
         logits = logits.to(dtype=torch.float32)
         if not torch.isfinite(logits).all().item():
             raise ValueError("LM head produced NaN or inf logits")
-        return int(logits.argmax(dim=-1).item())
+
+        gen_cfg = self.expert_manager.generation_config
+        if not gen_cfg.do_sample or gen_cfg.temperature <= 0.0:
+            return int(logits.argmax(dim=-1).item())
+        return self._sample_token_id(logits, gen_cfg.temperature, gen_cfg.top_p)
+
+    def _sample_token_id(
+        self,
+        logits: torch.Tensor,
+        temperature: float,
+        top_p: float,
+    ) -> int:
+        """
+        Draw one token id from a rank-1 logits tensor via temperature-scaled,
+        top-p (nucleus) filtered multinomial sampling.
+
+        Logic:
+        - scale logits by 1 / temperature
+        - if top_p < 1.0, keep the smallest set of highest-probability tokens
+          whose cumulative probability first reaches top_p, mask the rest to
+          -inf (the single most likely token is always kept)
+        - softmax the surviving logits and draw one index with torch.multinomial
+        """
+        if temperature <= 0.0:
+            raise ValueError(
+                f"sampling temperature must be > 0; got {temperature}"
+            )
+        if not 0.0 < top_p <= 1.0:
+            raise ValueError(f"top_p must be in (0, 1]; got {top_p}")
+
+        scaled = logits / float(temperature)
+        if top_p < 1.0:
+            sorted_logits, sorted_indices = torch.sort(scaled, descending=True)
+            cumulative = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+            remove = cumulative > top_p
+            # shift right so the most likely token is never removed
+            remove[1:] = remove[:-1].clone()
+            remove[0] = False
+            sorted_logits[remove] = float("-inf")
+            scaled = torch.full_like(scaled, float("-inf"))
+            scaled.scatter_(-1, sorted_indices, sorted_logits)
+        probabilities = torch.softmax(scaled, dim=-1)
+        return int(torch.multinomial(probabilities, num_samples=1).item())
 
     def run(self, prompt_text: str) -> MoCEResult:
         """

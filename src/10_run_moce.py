@@ -222,11 +222,22 @@ def build_engine(
         initialization_mode=str(ecfg["initialization_mode"]),
     )
 
+    # --temperature overrides the config: a value > 0 switches expert
+    # decoding to sampling, 0 forces greedy. When omitted, the config's
+    # temperature and do_sample are used unchanged.
+    if args.temperature is not None:
+        gen_temperature = float(args.temperature)
+        gen_do_sample = gen_temperature > 0.0
+    else:
+        gen_temperature = float(gcfg["temperature"])
+        gen_do_sample = bool(gcfg["do_sample"])
+    gen_top_p = float(args.top_p) if args.top_p is not None else float(gcfg["top_p"])
+
     generation_config = moce.GenerationConfig(
         max_new_tokens=int(gcfg["max_new_tokens"]),
-        temperature=float(gcfg["temperature"]),
-        do_sample=bool(gcfg["do_sample"]),
-        top_p=float(gcfg["top_p"]),
+        temperature=gen_temperature,
+        do_sample=gen_do_sample,
+        top_p=gen_top_p,
     )
 
     engine = moce.MoCEEngine(
@@ -422,6 +433,36 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help=(
+            "Override moce_inference.generation.temperature for expert "
+            "decoding. A value > 0 switches decoding to temperature "
+            "sampling; 0 forces greedy argmax. When omitted, the config's "
+            "temperature and do_sample are used unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+        help=(
+            "Override moce_inference.generation.top_p (nucleus cutoff). "
+            "Applies only when decoding samples."
+        ),
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help=(
+            "Seed the torch RNG so sampled decoding is reproducible across "
+            "runs. Recommended whenever --temperature enables sampling."
+        ),
+    )
+
+    parser.add_argument(
         "--calibrated",
         action="store_true",
         help="Enable calibrated routing. Requires --router-checkpoint.",
@@ -457,6 +498,10 @@ def parse_args() -> argparse.Namespace:
             "--router-checkpoint was provided without --calibrated; "
             "remove the checkpoint or pass --calibrated"
         )
+    if args.temperature is not None and args.temperature < 0.0:
+        parser.error("--temperature must be >= 0")
+    if args.top_p is not None and not 0.0 < args.top_p <= 1.0:
+        parser.error("--top-p must be in (0, 1]")
     return args
 
 
@@ -479,8 +524,19 @@ def main() -> None:
     model, tokenizer = load_model_and_tokenizer(base_model, dtype, device)
     engine = build_engine(inference_cfg, args, moce, model, tokenizer)
 
+    if args.seed is not None:
+        import torch  # noqa: PLC0415
+
+        torch.manual_seed(args.seed)
+        log.info("torch RNG seeded: %d", args.seed)
+
     mode = "calibrated" if args.calibrated else "heuristic"
-    log.info("MoCE engine ready (router mode: %s)", mode)
+    gen = engine.expert_manager.generation_config
+    if gen.do_sample and gen.temperature > 0.0:
+        decode = f"sampling (temperature={gen.temperature}, top_p={gen.top_p})"
+    else:
+        decode = "greedy"
+    log.info("MoCE engine ready (router mode: %s, decode: %s)", mode, decode)
 
     output_fh = None
     if args.output_path is not None:

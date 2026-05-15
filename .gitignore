@@ -15,6 +15,7 @@ data/experts/training-outputs/old/
 data/experts/train-validate/
 data/experts/test-outputs/
 data/router/
+data/evaluation/
 
 # outputs / logs
 outputs/

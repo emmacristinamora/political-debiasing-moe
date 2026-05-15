@@ -78,7 +78,7 @@ python -u src/10_run_moce.py \
   --config        config/config.yaml \
   --prompts-file  data/smoke_test_prompts.jsonl \
   --output-path   data/smoke-test-outputs/moce_smoke_test.jsonl \
-  --temperature 0.8 \
+  --temperature 0.9 \
   --top-p 0.95 \
   --seed 42 \
   --device  cuda

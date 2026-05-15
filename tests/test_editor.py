@@ -386,7 +386,7 @@ class ScoreCurrentMixtureTests(unittest.TestCase):
             bias_magnitude=0.5,
         )
         editor = _default_editor(fake=fake)
-        scores = editor.score_current_mixture(torch.zeros(4))
+        scores = editor.score_current_mixture(torch.tensor([1.0, 2.0, 3.0, 4.0]))
         self.assertEqual(
             set(scores.keys()),
             {"economic_score", "social_score", "quadrant_scores", "bias_magnitude"},
@@ -413,7 +413,7 @@ class ScoreCurrentMixtureTests(unittest.TestCase):
             },
         )
         editor = _default_editor(fake=fake)
-        scores = editor.score_current_mixture(torch.zeros(4))
+        scores = editor.score_current_mixture(torch.tensor([1.0, 2.0, 3.0, 4.0]))
         self.assertEqual(
             list(scores["quadrant_scores"].keys()),
             list(CANONICAL_QUADRANT_ORDER),
@@ -425,18 +425,25 @@ class ScoreCurrentMixtureTests(unittest.TestCase):
         )
         editor = _default_editor(fake=fake)
         with self.assertRaises(ValueError):
-            editor.score_current_mixture(torch.zeros(4))
+            editor.score_current_mixture(torch.tensor([1.0, 2.0, 3.0, 4.0]))
 
     def test_negative_bias_magnitude_raises(self) -> None:
         fake = _FakeInputTransformer(bias_magnitude=-0.1)
         editor = _default_editor(fake=fake)
         with self.assertRaises(ValueError):
-            editor.score_current_mixture(torch.zeros(4))
+            editor.score_current_mixture(torch.tensor([1.0, 2.0, 3.0, 4.0]))
 
     def test_non_tensor_input_raises(self) -> None:
         editor = _default_editor()
         with self.assertRaises(ValueError):
             editor.score_current_mixture([0.0, 0.0, 0.0, 0.0])  # type: ignore[arg-type]
+
+    def test_zero_norm_input_raises(self) -> None:
+        # a zero mixed hidden state has L2 norm 0 and cannot be normalized
+        # onto the unit-norm scale PromptState scoring uses
+        editor = _default_editor()
+        with self.assertRaises(ValueError):
+            editor.score_current_mixture(torch.zeros(4))
 
 
 class EditLoopTests(unittest.TestCase):

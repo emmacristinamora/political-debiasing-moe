@@ -1115,9 +1115,9 @@ class InputTransformer:
           length matches self.economic_vector
         - use_centering=False: return the validated tensor unchanged (detached,
           float32). encode_prompt already produces a unit-norm vector, so this
-          path is a no-op for the prompt flow; the Editor passes a mixed
-          hidden state through this method as well, where preserving its
-          scale is intentional.
+          path is a no-op for the prompt flow; the Editor's
+          score_current_mixture likewise L2-normalizes the mixed hidden state
+          to unit norm before calling this method, so it is a no-op there too.
         - use_centering=True: subtract self.neutral_reference and L2-normalize
           so projections operate at the same scale as encode_prompt's
           unit-norm output.
@@ -3190,6 +3190,10 @@ class Editor:
 
         Scoring path:
         - if rank-2: mean-pool along dim=0 to a 1D vector
+        - L2-normalize the pooled vector to unit norm so the mixture is scored
+          on the SAME scale as InputTransformer.encode_prompt's PromptState
+          output (the raw layer-20 hidden state carries a per-prompt magnitude
+          that would otherwise inflate axis/quadrant scores)
         - mirrors InputTransformer.transform on the resulting 1D hidden state:
           maybe-center the representation, compute axis scores,
           compute quadrant scores, derive bias magnitude
@@ -3243,9 +3247,25 @@ class Editor:
         else:
             pooled = mixed_hidden_state
 
+        # L2-normalize the pooled vector to unit norm so the mixture is scored
+        # on the SAME scale as PromptState. InputTransformer.encode_prompt ends
+        # with a unit-norm representation; the raw layer-20 hidden state mixed
+        # here carries a per-prompt magnitude (norm in the tens) that would
+        # otherwise inflate axis/quadrant scores ~20-60x and desynchronize the
+        # editor's convergence and axis-proximity thresholds from the scale
+        # they were tuned for.
+        norm = float(torch.linalg.vector_norm(pooled).item())
+        if not math.isfinite(norm) or norm <= 0.0:
+            raise ValueError(
+                "score_current_mixture: mixed hidden state has a non-positive "
+                "or non-finite L2 norm; cannot normalize"
+            )
+        pooled = pooled / norm
+
         # mirror the InputTransformer pipeline used to build PromptState:
         # encode is skipped (we already hold a hidden state), then
-        # maybe_center -> axis_scores -> quadrant_scores -> bias_magnitude
+        # normalize -> maybe_center -> axis_scores -> quadrant_scores ->
+        # bias_magnitude
         centered = self.input_transformer.maybe_center_representation(pooled)
         axis_scores = self.input_transformer.compute_axis_scores(centered)
         quadrant_scores = self.input_transformer.compute_quadrant_scores(centered)

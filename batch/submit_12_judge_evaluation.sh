@@ -70,21 +70,23 @@ echo "[info] all pre-flight checks passed"
 echo "[info] running judge stance scoring"
 
 python -u src/12_judge_evaluation.py stance \
-  --inputs    "$BIAS_OUTPUTS" \
-  --polarity  "$POLARITY_KEY" \
-  --device    cuda
+  --inputs      "$BIAS_OUTPUTS" \
+  --polarity    "$POLARITY_KEY" \
+  --device      cuda \
+  --judge-model Qwen/Qwen2.5-7B-Instruct
 
 # ── Test 2: blind pairwise preference ──────────────────────────────────────────
-# The Llama judge compares base vs moce answers head-to-head on neutrality and
+# The Qwen judge compares base vs moce answers head-to-head on neutrality and
 # coherence, in both orderings. Writes data/evaluation/judge_pairwise/.
 
 echo "[info] running judge pairwise preference (base vs moce)"
 
 python -u src/12_judge_evaluation.py pairwise \
-  --inputs    "$BIAS_OUTPUTS" \
-  --baseline  base \
-  --treatment moce \
-  --device    cuda
+  --inputs      "$BIAS_OUTPUTS" \
+  --baseline    base \
+  --treatment   moce \
+  --device      cuda \
+  --judge-model Qwen/Qwen2.5-7B-Instruct
 
 echo ""
 echo "[info] end=$(date)"

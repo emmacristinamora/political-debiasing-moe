@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=0:30:00
+#SBATCH --time=2:30:00
 #SBATCH --output=logs/judge_eval_%j.out
 #SBATCH --error=logs/judge_eval_%j.err
 #SBATCH --requeue

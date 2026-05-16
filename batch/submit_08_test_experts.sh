@@ -88,7 +88,7 @@ python -u src/08_test_experts.py \
   --econ-vector-path                 data/steering-vectors/vectors/economic_vectors.pt \
   --social-vector-path               data/steering-vectors/vectors/social_vectors.pt \
   --output-dir                       data/experts/test-outputs \
-  --projection-layer                 16 \
+  --projection-layer                 20 \
   --adapter-econ-right-authoritarian data/experts/final-experts/right_auth \
   --adapter-econ-left-authoritarian  data/experts/final-experts/left_auth \
   --adapter-econ-left-libertarian    data/experts/final-experts/left_lib \
@@ -97,7 +97,7 @@ python -u src/08_test_experts.py \
   --device                           cuda \
   --max-new-tokens                   120 \
   --do-sample                         \
-  --temperature                      0.7 \
+  --temperature                      0.9 \
   --top-p 0.9
 
 echo ""

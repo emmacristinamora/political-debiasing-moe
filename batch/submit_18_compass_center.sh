@@ -35,7 +35,7 @@ echo "[info] python=$(which python)"
 
 # ── inputs / outputs ───────────────────────────────────────────────────────────
 
-DATASET="data/TOBEDEFINED.jsonl"
+DATASET="data/neutral_prompts.jsonl"
 OUTPUT="data/compass_center/center.json"
 
 # ── sanity checks ──────────────────────────────────────────────────────────────

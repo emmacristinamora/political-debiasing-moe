@@ -7,47 +7,47 @@
     "seed": 0
   },
   "orthogonality": {
-    "final_vector_cosine": -0.12134383618831635,
+    "final_vector_cosine": -0.12134379148483276,
     "per_layer_cosine": {
-      "8": -0.11929786205291748,
-      "12": -0.07208158820867538,
-      "16": -0.12000113725662231,
-      "20": -0.10006510466337204,
-      "24": -0.1109171137213707
+      "8": -0.11929789930582047,
+      "12": -0.07208161801099777,
+      "16": -0.12000114470720291,
+      "20": -0.10006504505872726,
+      "24": -0.1109171062707901
     },
-    "max_abs_per_layer_cosine": 0.12000113725662231,
+    "max_abs_per_layer_cosine": 0.12000114470720291,
     "interpretation": "near 0 = independent axes; large |cos| = axes collapse to 1D"
   },
   "cross_projection": {
     "separation_matrix": {
       "economic": {
-        "economic": 4.923025131225586,
-        "social": -0.722684919834137
+        "economic": 4.923026084899902,
+        "social": -0.7226848006248474
       },
       "social": {
         "economic": -1.339623212814331,
-        "social": 7.320830821990967
+        "social": 7.320832252502441
       }
     },
     "rows": "statement axis",
     "columns": "projection axis",
-    "min_diagonal_separation": 4.923025131225586,
+    "min_diagonal_separation": 4.923026084899902,
     "max_abs_off_diagonal_separation": 1.339623212814331,
     "interpretation": "large diagonal, near-zero off-diagonal = clean axis separation"
   },
   "axes": {
     "economic": {
       "null_baselines": {
-        "real_separation": 4.923025131225586,
+        "real_separation": 4.923026084899902,
         "random_direction_null": {
-          "mean": 0.4431058542095125,
-          "p95": 1.0424889147281646,
-          "max": 1.7676761150360107
+          "mean": 0.4431058684748132,
+          "p95": 1.0424891829490661,
+          "max": 1.7676770687103271
         },
         "shuffled_label_null": {
-          "mean": 0.4837658740878105,
-          "p95": 0.6508428901433941,
-          "max": 0.8480178117752075,
+          "mean": 0.483765853703022,
+          "p95": 0.6508429318666455,
+          "max": 0.848017692565918,
           "permutation_p_value": 0.001996007984031936
         },
         "interpretation": "real_separation must exceed both nulls; low p-value = real signal"
@@ -72,16 +72,16 @@
     },
     "social": {
       "null_baselines": {
-        "real_separation": 7.320830821990967,
+        "real_separation": 7.320832252502441,
         "random_direction_null": {
-          "mean": 0.7373350833030418,
-          "p95": 1.8248043358325952,
-          "max": 3.2404069900512695
+          "mean": 0.7373350949031301,
+          "p95": 1.824803674221038,
+          "max": 3.240410089492798
         },
         "shuffled_label_null": {
-          "mean": 0.5348114355206489,
-          "p95": 0.6733438044786452,
-          "max": 0.8561339974403381,
+          "mean": 0.5348114382028579,
+          "p95": 0.6733436286449431,
+          "max": 0.8561339378356934,
           "permutation_p_value": 0.001996007984031936
         },
         "interpretation": "real_separation must exceed both nulls; low p-value = real signal"

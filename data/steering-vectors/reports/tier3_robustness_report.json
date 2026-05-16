@@ -16,7 +16,7 @@
           "template_3": {
             "n_test_pairs": 30,
             "held_out_auc": 1.0,
-            "held_out_separation": 4.5237321853637695
+            "held_out_separation": 4.523731708526611
           }
         },
         "min_held_out_auc": 1.0,
@@ -24,12 +24,12 @@
       },
       "template_invariance": {
         "cross_template_pearson": {
-          "template_1-template_2": 0.9592652547769684,
-          "template_1-template_3": 0.9633862669472896,
-          "template_2-template_3": 0.9403867358433369
+          "template_1-template_2": 0.9592652181184758,
+          "template_1-template_3": 0.9633863016638436,
+          "template_2-template_3": 0.9403867383661677
         },
-        "min_cross_template_pearson": 0.9403867358433369,
-        "mean_cross_template_pearson": 0.9543460858558651,
+        "min_cross_template_pearson": 0.9403867383661677,
+        "mean_cross_template_pearson": 0.9543460860494957,
         "interpretation": "high correlation = templates rank statements alike (paraphrase-invariant)"
       },
       "leave_one_topic_out": {
@@ -37,27 +37,27 @@
           "labour_automation": {
             "n_test_pairs": 15,
             "held_out_auc": 1.0,
-            "held_out_separation": 5.132417678833008
+            "held_out_separation": 5.13241720199585
           },
           "markets_corporations": {
             "n_test_pairs": 24,
             "held_out_auc": 1.0,
-            "held_out_separation": 6.181656837463379
+            "held_out_separation": 6.181656360626221
           },
           "public_ownership": {
             "n_test_pairs": 12,
             "held_out_auc": 1.0,
-            "held_out_separation": 6.766080856323242
+            "held_out_separation": 6.766078472137451
           },
           "public_services_funding": {
             "n_test_pairs": 18,
             "held_out_auc": 1.0,
-            "held_out_separation": 5.392025470733643
+            "held_out_separation": 5.392026424407959
           },
           "taxation_redistribution": {
             "n_test_pairs": 18,
             "held_out_auc": 1.0,
-            "held_out_separation": 4.763075828552246
+            "held_out_separation": 4.76307487487793
           }
         },
         "min_held_out_auc": 1.0,
@@ -75,12 +75,12 @@
           "template_2": {
             "n_test_pairs": 30,
             "held_out_auc": 1.0,
-            "held_out_separation": 6.314278602600098
+            "held_out_separation": 6.314277648925781
           },
           "template_3": {
             "n_test_pairs": 30,
             "held_out_auc": 1.0,
-            "held_out_separation": 5.326794147491455
+            "held_out_separation": 5.326794624328613
           }
         },
         "min_held_out_auc": 1.0,
@@ -88,12 +88,12 @@
       },
       "template_invariance": {
         "cross_template_pearson": {
-          "template_1-template_2": 0.8677855734856955,
-          "template_1-template_3": 0.9448882464418258,
-          "template_2-template_3": 0.8721464755308115
+          "template_1-template_2": 0.8677877760524123,
+          "template_1-template_3": 0.9448885079981597,
+          "template_2-template_3": 0.8721473047836833
         },
-        "min_cross_template_pearson": 0.8677855734856955,
-        "mean_cross_template_pearson": 0.8949400984861109,
+        "min_cross_template_pearson": 0.8677877760524123,
+        "mean_cross_template_pearson": 0.8949411962780851,
         "interpretation": "high correlation = templates rank statements alike (paraphrase-invariant)"
       },
       "leave_one_topic_out": {
@@ -101,32 +101,32 @@
           "authority_hierarchy": {
             "n_test_pairs": 15,
             "held_out_auc": 1.0,
-            "held_out_separation": 4.801084041595459
+            "held_out_separation": 4.801085472106934
           },
           "crime_punishment": {
             "n_test_pairs": 15,
             "held_out_auc": 1.0,
-            "held_out_separation": 8.832084655761719
+            "held_out_separation": 8.832086563110352
           },
           "culture_identity": {
             "n_test_pairs": 12,
             "held_out_auc": 1.0,
-            "held_out_separation": 5.60522985458374
+            "held_out_separation": 5.605230331420898
           },
           "family_education": {
             "n_test_pairs": 15,
             "held_out_auc": 1.0,
-            "held_out_separation": 8.602932929992676
+            "held_out_separation": 8.602934837341309
           },
           "privacy_civil_liberties": {
             "n_test_pairs": 9,
             "held_out_auc": 1.0,
-            "held_out_separation": 8.11305046081543
+            "held_out_separation": 8.113055229187012
           },
           "sexual_reproductive_morality": {
             "n_test_pairs": 18,
             "held_out_auc": 1.0,
-            "held_out_separation": 4.693481922149658
+            "held_out_separation": 4.693480968475342
           }
         },
         "min_held_out_auc": 1.0,

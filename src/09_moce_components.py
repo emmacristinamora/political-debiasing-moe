@@ -1723,13 +1723,38 @@ class Router:
             return False
         return prompt_state.bias_magnitude < self.config.center_threshold
 
+    def _standardize_scores(self, scores: list[float]) -> list[float]:
+        """
+        Z-score the quadrant scores to zero mean and unit spread.
+
+        Logic:
+        - the raw quadrant scores are cosine-scale (~0.05 in the 4096-d hidden
+          space), far too small for softmax at temperature 1.0 — the prior
+          collapses to near-uniform regardless of how charged the prompt is
+        - standardising to unit standard deviation makes beta / temperature
+          operate on a scale-invariant signal, so the prior keys on the
+          relative ordering of the quadrants rather than their tiny absolute
+          magnitude; the ordering (and thus the counterbalancing direction) is
+          preserved because a z-score is monotonic
+        - a zero-spread input (all four scores equal) returns all zeros, which
+          softmaxes to a uniform prior
+        """
+        count = len(scores)
+        mean = sum(scores) / count
+        variance = sum((score - mean) ** 2 for score in scores) / count
+        std = math.sqrt(variance)
+        if std < 1e-8:
+            return [0.0 for _ in scores]
+        return [(score - mean) / std for score in scores]
+
     def build_heuristic_prior(self, prompt_state: PromptState) -> dict[str, float]:
         """
         Build heuristic prior pi_0 from quadrant alignment scores.
 
         Logic:
         - if the prompt is near center, return a uniform prior
-        - otherwise compute pi_0 = softmax(-beta * q / temperature) over
+        - otherwise standardise the quadrant scores to unit spread, then
+          compute pi_0 = softmax(-beta * q_std / temperature) over
           CANONICAL_QUADRANT_ORDER
 
         Raises:
@@ -1746,9 +1771,10 @@ class Router:
             )
 
         ordered_scores = self._extract_ordered_quadrant_scores(prompt_state)
+        standardized_scores = self._standardize_scores(ordered_scores)
         logits = [
             -self.config.beta * score / self.config.temperature
-            for score in ordered_scores
+            for score in standardized_scores
         ]
         probabilities = self._softmax(logits)
         return {key: prob for key, prob in zip(CANONICAL_QUADRANT_ORDER, probabilities)}

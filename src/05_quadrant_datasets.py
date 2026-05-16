@@ -88,6 +88,8 @@ class BuildConfig:
     thresholds: ThresholdConfig = field(default_factory=ThresholdConfig)
     pooling: PoolingConfig = field(default_factory=PoolingConfig)
     topics: TopicConfig = field(default_factory=TopicConfig)
+    center_econ: float = 0.0   # calibrated compass center (economic axis)
+    center_soc: float  = 0.0   # calibrated compass center (social axis)
 
 @dataclass
 class RawDocument:
@@ -227,7 +229,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hoc-sample-n", type=int, default=None,
                         help="Max HoC speeches to sample (stratified by decade×party). "
                              "Ignored for non-HoC sources. None = use all.")
+    parser.add_argument("--compass-center-path", type=Path, default=None,
+                        help="Path to center.json produced by src/18_compass_center.py. "
+                             "If provided, quadrant boundaries are shifted to this center.")
     return parser.parse_args()
+
+
+def _load_center(args: argparse.Namespace, dataset_cfg: Dict[str, Any]) -> Dict[str, float]:
+    """Load compass center from JSON; fall back to (0, 0) if not provided."""
+    center_path_raw = getattr(args, "compass_center_path", None) or dataset_cfg.get("compass_center_path")
+    if center_path_raw is None:
+        return {"center_econ": 0.0, "center_soc": 0.0}
+    center_path = Path(center_path_raw) if not isinstance(center_path_raw, Path) else center_path_raw
+    if not center_path.is_absolute():
+        center_path = PROJECT_ROOT / center_path
+    if not center_path.is_file():
+        raise FileNotFoundError(f"compass_center_path not found: {center_path}")
+    data = json.loads(center_path.read_text(encoding="utf-8"))
+    return {
+        "center_econ": float(data["center"]["economic"]),
+        "center_soc":  float(data["center"]["social"]),
+    }
 
 
 def build_config(args: argparse.Namespace) -> BuildConfig:
@@ -287,6 +309,7 @@ def build_config(args: argparse.Namespace) -> BuildConfig:
             args.hoc_sample_n if args.hoc_sample_n is not None
             else dataset_cfg.get("hoc_sample_n")  # None means use all
         ),
+        **_load_center(args, dataset_cfg),
     )
 
 
@@ -632,36 +655,40 @@ def compute_chunk_scores(
     return score_econ, score_soc
 
 
-def quadrant_from_scores(score_econ: float, score_soc: float) -> str:
+def quadrant_from_scores(score_econ: float, score_soc: float, center_econ: float = 0.0, center_soc: float = 0.0) -> str:
     """
     Sign convention (from script 04):
         econ  positive = econ_right,    negative = econ_left
         soc   positive = authoritarian, negative = libertarian
 
-    Quadrant mapping:
-        right_auth = econ_right + authoritarian (econ >= 0, soc >= 0)
-        left_auth  = econ_left  + authoritarian (econ < 0,  soc >= 0)
-        left_lib   = econ_left  + libertarian   (econ < 0,  soc < 0)
-        right_lib  = econ_right + libertarian   (econ >= 0, soc < 0)
+    Quadrant mapping (evaluated relative to center):
+        right_auth = econ_right + authoritarian (shifted_econ >= 0, shifted_soc >= 0)
+        left_auth  = econ_left  + authoritarian (shifted_econ < 0,  shifted_soc >= 0)
+        left_lib   = econ_left  + libertarian   (shifted_econ < 0,  shifted_soc < 0)
+        right_lib  = econ_right + libertarian   (shifted_econ >= 0, shifted_soc < 0)
     """
-    if score_econ >= 0 and score_soc >= 0:
+    se = score_econ - center_econ
+    ss = score_soc  - center_soc
+    if se >= 0 and ss >= 0:
         return "right_auth"
-    if score_econ < 0 and score_soc >= 0:
+    if se < 0 and ss >= 0:
         return "left_auth"
-    if score_econ < 0 and score_soc < 0:
+    if se < 0 and ss < 0:
         return "left_lib"
     return "right_lib"
 
 
-def compute_confidence_margin(score_econ: float, score_soc: float) -> float:
-    return min(abs(score_econ), abs(score_soc))
+def compute_confidence_margin(score_econ: float, score_soc: float, center_econ: float = 0.0, center_soc: float = 0.0) -> float:
+    return min(abs(score_econ - center_econ), abs(score_soc - center_soc))
 
 
 def passes_thresholds(score_econ: float, score_soc: float, config: BuildConfig) -> bool:
+    se = abs(score_econ - config.center_econ)
+    ss = abs(score_soc  - config.center_soc)
     return (
-        abs(score_econ) >= config.thresholds.min_abs_econ
-        and abs(score_soc) >= config.thresholds.min_abs_soc
-        and compute_confidence_margin(score_econ, score_soc) >= config.thresholds.min_confidence_margin
+        se >= config.thresholds.min_abs_econ
+        and ss >= config.thresholds.min_abs_soc
+        and min(se, ss) >= config.thresholds.min_confidence_margin
     )
 
 
@@ -735,7 +762,7 @@ def build_scored_chunks(
         for (document, chunk_id, chunk_text, n_tokens), embedding in zip(items, embeddings):
             n_chunks_total += 1
             score_econ, score_soc = compute_chunk_scores(embedding, econ_vector, soc_vector)
-            quadrant = quadrant_from_scores(score_econ, score_soc)
+            quadrant = quadrant_from_scores(score_econ, score_soc, config.center_econ, config.center_soc)
             passed   = passes_thresholds(score_econ, score_soc, config)
 
             topic_primary: Optional[str]         = None
@@ -773,9 +800,9 @@ def build_scored_chunks(
                 n_tokens=n_tokens,
                 score_econ=score_econ,
                 score_soc=score_soc,
-                score_abs_econ=abs(score_econ),
-                score_abs_soc=abs(score_soc),
-                confidence_margin=compute_confidence_margin(score_econ, score_soc),
+                score_abs_econ=abs(score_econ - config.center_econ),
+                score_abs_soc=abs(score_soc  - config.center_soc),
+                confidence_margin=compute_confidence_margin(score_econ, score_soc, config.center_econ, config.center_soc),
                 threshold_pass=passed,
                 selection_stage=selection_stage,
                 raw_dataset=document.raw_dataset,
@@ -954,6 +981,8 @@ def build_config_snapshot(config: BuildConfig) -> Dict[str, Any]:
         "topic_names":         [p.name for p in config.topics.prototypes],
         "batch_size":          config.pooling.batch_size,
         "hoc_sample_n":        config.hoc_sample_n,
+        "center_econ":         config.center_econ,
+        "center_soc":          config.center_soc,
     }
 
 

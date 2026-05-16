@@ -204,8 +204,9 @@ quadrant_dataset:
   # paths & config
   normalized_dir:    data/experts/raw/normalized
   output_dir:        data/experts/quadrant-pools-new
-  econ_vectors_path: data/steering-vectors/vectors/economic_vectors.pt
-  soc_vectors_path:  data/steering-vectors/vectors/social_vectors.pt
+  econ_vectors_path:      data/steering-vectors/vectors/economic_vectors.pt
+  soc_vectors_path:       data/steering-vectors/vectors/social_vectors.pt
+  compass_center_path:    data/compass_center/center.json
   device: "cuda"
   dtype:  "float16"
   # sliding window chunking

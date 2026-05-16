@@ -14,8 +14,14 @@ data/experts/training-outputs/
 data/experts/training-outputs/old/
 data/experts/train-validate/
 data/experts/test-outputs/
-data/router/
 data/evaluation/
+data/external/*
+data/router/
+
+!data/external/hein_dwnominate/
+data/external/hein_dwnominate/*
+!data/external/hein_dwnominate/legislator_dataset.jsonl
+!data/external/hein_dwnominate/compass_projections.jsonl
 
 # outputs / logs
 outputs/

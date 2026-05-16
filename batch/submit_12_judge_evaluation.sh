@@ -74,6 +74,18 @@ python -u src/12_judge_evaluation.py stance \
   --polarity  "$POLARITY_KEY" \
   --device    cuda
 
+# ── Test 2: blind pairwise preference ──────────────────────────────────────────
+# The Llama judge compares base vs moce answers head-to-head on neutrality and
+# coherence, in both orderings. Writes data/evaluation/judge_pairwise/.
+
+echo "[info] running judge pairwise preference (base vs moce)"
+
+python -u src/12_judge_evaluation.py pairwise \
+  --inputs    "$BIAS_OUTPUTS" \
+  --baseline  base \
+  --treatment moce \
+  --device    cuda
+
 echo ""
 echo "[info] end=$(date)"
-echo "[info] outputs in data/evaluation/judge_stance/"
+echo "[info] outputs in data/evaluation/judge_stance/ and data/evaluation/judge_pairwise/"

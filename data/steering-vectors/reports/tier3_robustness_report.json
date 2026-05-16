@@ -1,0 +1,137 @@
+{
+  "axes": {
+    "economic": {
+      "leave_one_template_out": {
+        "per_group": {
+          "template_1": {
+            "n_test_pairs": 30,
+            "held_out_auc": 1.0,
+            "held_out_separation": 4.6181488037109375
+          },
+          "template_2": {
+            "n_test_pairs": 30,
+            "held_out_auc": 1.0,
+            "held_out_separation": 7.3329243659973145
+          },
+          "template_3": {
+            "n_test_pairs": 30,
+            "held_out_auc": 1.0,
+            "held_out_separation": 4.5237321853637695
+          }
+        },
+        "min_held_out_auc": 1.0,
+        "mean_held_out_auc": 1.0
+      },
+      "template_invariance": {
+        "cross_template_pearson": {
+          "template_1-template_2": 0.9592652547769684,
+          "template_1-template_3": 0.9633862669472896,
+          "template_2-template_3": 0.9403867358433369
+        },
+        "min_cross_template_pearson": 0.9403867358433369,
+        "mean_cross_template_pearson": 0.9543460858558651,
+        "interpretation": "high correlation = templates rank statements alike (paraphrase-invariant)"
+      },
+      "leave_one_topic_out": {
+        "per_group": {
+          "labour_automation": {
+            "n_test_pairs": 15,
+            "held_out_auc": 1.0,
+            "held_out_separation": 5.132417678833008
+          },
+          "markets_corporations": {
+            "n_test_pairs": 24,
+            "held_out_auc": 1.0,
+            "held_out_separation": 6.181656837463379
+          },
+          "public_ownership": {
+            "n_test_pairs": 12,
+            "held_out_auc": 1.0,
+            "held_out_separation": 6.766080856323242
+          },
+          "public_services_funding": {
+            "n_test_pairs": 18,
+            "held_out_auc": 1.0,
+            "held_out_separation": 5.392025470733643
+          },
+          "taxation_redistribution": {
+            "n_test_pairs": 18,
+            "held_out_auc": 1.0,
+            "held_out_separation": 4.763075828552246
+          }
+        },
+        "min_held_out_auc": 1.0,
+        "mean_held_out_auc": 1.0
+      }
+    },
+    "social": {
+      "leave_one_template_out": {
+        "per_group": {
+          "template_1": {
+            "n_test_pairs": 30,
+            "held_out_auc": 1.0,
+            "held_out_separation": 5.472082614898682
+          },
+          "template_2": {
+            "n_test_pairs": 30,
+            "held_out_auc": 1.0,
+            "held_out_separation": 6.314278602600098
+          },
+          "template_3": {
+            "n_test_pairs": 30,
+            "held_out_auc": 1.0,
+            "held_out_separation": 5.326794147491455
+          }
+        },
+        "min_held_out_auc": 1.0,
+        "mean_held_out_auc": 1.0
+      },
+      "template_invariance": {
+        "cross_template_pearson": {
+          "template_1-template_2": 0.8677855734856955,
+          "template_1-template_3": 0.9448882464418258,
+          "template_2-template_3": 0.8721464755308115
+        },
+        "min_cross_template_pearson": 0.8677855734856955,
+        "mean_cross_template_pearson": 0.8949400984861109,
+        "interpretation": "high correlation = templates rank statements alike (paraphrase-invariant)"
+      },
+      "leave_one_topic_out": {
+        "per_group": {
+          "authority_hierarchy": {
+            "n_test_pairs": 15,
+            "held_out_auc": 1.0,
+            "held_out_separation": 4.801084041595459
+          },
+          "crime_punishment": {
+            "n_test_pairs": 15,
+            "held_out_auc": 1.0,
+            "held_out_separation": 8.832084655761719
+          },
+          "culture_identity": {
+            "n_test_pairs": 12,
+            "held_out_auc": 1.0,
+            "held_out_separation": 5.60522985458374
+          },
+          "family_education": {
+            "n_test_pairs": 15,
+            "held_out_auc": 1.0,
+            "held_out_separation": 8.602932929992676
+          },
+          "privacy_civil_liberties": {
+            "n_test_pairs": 9,
+            "held_out_auc": 1.0,
+            "held_out_separation": 8.11305046081543
+          },
+          "sexual_reproductive_morality": {
+            "n_test_pairs": 18,
+            "held_out_auc": 1.0,
+            "held_out_separation": 4.693481922149658
+          }
+        },
+        "min_held_out_auc": 1.0,
+        "mean_held_out_auc": 1.0
+      }
+    }
+  }
+}

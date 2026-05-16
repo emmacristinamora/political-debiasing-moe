@@ -1,0 +1,31 @@
+# config/topic_holdout_key.yaml
+
+# Topic labels for the Tier 3 leave-one-topic-out robustness test.
+#
+# Each contrastive-pair seed statement is assigned an issue-area topic. The test
+# rebuilds the steering vector with one topic's statements removed, then checks
+# the vector still separates that held-out topic's pairs — i.e. the steering
+# direction generalises across issues rather than memorising topic vocabulary.
+#
+# Statements under `excluded` stay in every vector build but are never used as a
+# held-out topic: they do not fit a coherent economic/social issue area
+# (econ_14 "an eye for an eye"; social_23 nature's intrinsic value reads
+# environmental; social_25 charity-vs-welfare reads economic).
+
+
+economic:
+  taxation_redistribution: [econ_8, econ_12, econ_20, econ_21, econ_22, econ_23]
+  labour_automation:       [econ_13, econ_18, econ_19, econ_29, econ_30]
+  markets_corporations:    [econ_1, econ_2, econ_5, econ_6, econ_7, econ_10, econ_11, econ_16]
+  public_ownership:        [econ_3, econ_4, econ_24, econ_25]
+  public_services_funding: [econ_9, econ_15, econ_17, econ_26, econ_27, econ_28]
+
+social:
+  authority_hierarchy:          [social_1, social_14, social_19, social_24, social_29]
+  crime_punishment:             [social_2, social_12, social_13, social_16, social_27]
+  sexual_reproductive_morality: [social_3, social_4, social_5, social_6, social_8, social_28]
+  privacy_civil_liberties:      [social_7, social_18, social_20]
+  family_education:             [social_9, social_10, social_17, social_22, social_26]
+  culture_identity:             [social_11, social_15, social_21, social_30]
+
+excluded: [econ_14, social_23, social_25]

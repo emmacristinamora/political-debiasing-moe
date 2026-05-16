@@ -60,13 +60,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_prompts(path: Path) -> list[str]:
-    """Load the neutral-prompt dataset; each row must have a 'text' field."""
+    """Load the neutral-prompt dataset; each row must have a 'prompt' field."""
     if not path.is_file():
         raise FileNotFoundError(f"dataset not found: {path}")
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if not rows:
         raise ValueError(f"{path}: no rows")
-    texts = [row["text"] for row in rows]
+    texts = [row["prompt"] for row in rows]
     return texts
 
 

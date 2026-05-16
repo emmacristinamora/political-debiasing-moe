@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=compass_center
-#SBATCH --partition=gpuhnew
+#SBATCH --partition=gpunew
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G

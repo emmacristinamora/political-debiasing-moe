@@ -1,0 +1,108 @@
+{
+  "method": "mean_difference",
+  "config": {
+    "num_permutations": 500,
+    "num_random": 500,
+    "kfolds": 5,
+    "seed": 0
+  },
+  "orthogonality": {
+    "final_vector_cosine": -0.12134383618831635,
+    "per_layer_cosine": {
+      "8": -0.11929786205291748,
+      "12": -0.07208158820867538,
+      "16": -0.12000113725662231,
+      "20": -0.10006510466337204,
+      "24": -0.1109171137213707
+    },
+    "max_abs_per_layer_cosine": 0.12000113725662231,
+    "interpretation": "near 0 = independent axes; large |cos| = axes collapse to 1D"
+  },
+  "cross_projection": {
+    "separation_matrix": {
+      "economic": {
+        "economic": 4.923025131225586,
+        "social": -0.722684919834137
+      },
+      "social": {
+        "economic": -1.339623212814331,
+        "social": 7.320830821990967
+      }
+    },
+    "rows": "statement axis",
+    "columns": "projection axis",
+    "min_diagonal_separation": 4.923025131225586,
+    "max_abs_off_diagonal_separation": 1.339623212814331,
+    "interpretation": "large diagonal, near-zero off-diagonal = clean axis separation"
+  },
+  "axes": {
+    "economic": {
+      "null_baselines": {
+        "real_separation": 4.923025131225586,
+        "random_direction_null": {
+          "mean": 0.4431058542095125,
+          "p95": 1.0424889147281646,
+          "max": 1.7676761150360107
+        },
+        "shuffled_label_null": {
+          "mean": 0.4837658740878105,
+          "p95": 0.6508428901433941,
+          "max": 0.8480178117752075,
+          "permutation_p_value": 0.001996007984031936
+        },
+        "interpretation": "real_separation must exceed both nulls; low p-value = real signal"
+      },
+      "held_out_separability": {
+        "in_sample_auc": 1.0,
+        "cross_validated_auc": 1.0,
+        "shuffled_label_auc": 0.4658024691358025,
+        "interpretation": "cross_validated_auc is the honest number; shuffled ~0.5 is the floor"
+      },
+      "method_agreement": {
+        "method_cosine_per_layer": {
+          "8": 0.9926507472991943,
+          "12": 0.9906043410301208,
+          "16": 0.9716213941574097,
+          "20": 0.9424247145652771,
+          "24": 0.934720516204834
+        },
+        "min_method_cosine": 0.934720516204834,
+        "interpretation": "high cosine = the two extraction methods agree on the direction"
+      }
+    },
+    "social": {
+      "null_baselines": {
+        "real_separation": 7.320830821990967,
+        "random_direction_null": {
+          "mean": 0.7373350833030418,
+          "p95": 1.8248043358325952,
+          "max": 3.2404069900512695
+        },
+        "shuffled_label_null": {
+          "mean": 0.5348114355206489,
+          "p95": 0.6733438044786452,
+          "max": 0.8561339974403381,
+          "permutation_p_value": 0.001996007984031936
+        },
+        "interpretation": "real_separation must exceed both nulls; low p-value = real signal"
+      },
+      "held_out_separability": {
+        "in_sample_auc": 1.0,
+        "cross_validated_auc": 1.0,
+        "shuffled_label_auc": 0.45580246913580247,
+        "interpretation": "cross_validated_auc is the honest number; shuffled ~0.5 is the floor"
+      },
+      "method_agreement": {
+        "method_cosine_per_layer": {
+          "8": 0.7560439705848694,
+          "12": 0.8562740683555603,
+          "16": 0.9662600755691528,
+          "20": 0.9747046232223511,
+          "24": 0.9682728052139282
+        },
+        "min_method_cosine": 0.7560439705848694,
+        "interpretation": "high cosine = the two extraction methods agree on the direction"
+      }
+    }
+  }
+}

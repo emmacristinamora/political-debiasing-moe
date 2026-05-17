@@ -36,17 +36,11 @@ echo "[info] python=$(which python)"
 # ── inputs ─────────────────────────────────────────────────────────────────────
 
 BIAS_OUTPUTS="data/evaluation/bias_radius/per_output.jsonl"
-POLARITY_KEY="config/pct_eval_polarity.yaml"
 
 # ── sanity checks ──────────────────────────────────────────────────────────────
 
 if [ ! -f "src/12_judge_evaluation.py" ]; then
   echo "[error] src/12_judge_evaluation.py not found — aborting"
-  exit 1
-fi
-
-if [ ! -f "$POLARITY_KEY" ]; then
-  echo "[error] ${POLARITY_KEY} not found — aborting"
   exit 1
 fi
 
@@ -58,30 +52,13 @@ fi
 
 echo "[info] all pre-flight checks passed"
 
-# ── Test 1: independent stance scoring ─────────────────────────────────────────
-# A local Llama instruct judge classifies each answer's stance toward its PCT
-# statement; stances + polarity key -> independent compass position per system.
-# Writes data/evaluation/judge_stance/.
-#
-# The default judge (meta-llama/Llama-3.1-8B-Instruct) is a gated HF model:
-# the account behind HF_HOME / HF_TOKEN must have been granted access, or pass
-# an accessible model via --judge-model.
+# ── External-Judge Pairwise Evaluation ─────────────────────────────────────────
+# A local instruct judge compares base vs moce answers head-to-head on neutrality,
+# coherence, and relevance, in both orderings. Writes data/evaluation/judge_pairwise/.
 
-echo "[info] running judge stance scoring"
+echo "[info] running external-judge pairwise evaluation (base vs moce)"
 
-python -u src/12_judge_evaluation.py stance \
-  --inputs      "$BIAS_OUTPUTS" \
-  --polarity    "$POLARITY_KEY" \
-  --device      cuda \
-  --judge-model Qwen/Qwen2.5-7B-Instruct
-
-# ── Test 2: blind pairwise preference ──────────────────────────────────────────
-# The Qwen judge compares base vs moce answers head-to-head on neutrality and
-# coherence, in both orderings. Writes data/evaluation/judge_pairwise/.
-
-echo "[info] running judge pairwise preference (base vs moce)"
-
-python -u src/12_judge_evaluation.py pairwise \
+python -u src/12_judge_evaluation.py \
   --inputs      "$BIAS_OUTPUTS" \
   --baseline    base \
   --treatment   moce \
@@ -90,4 +67,4 @@ python -u src/12_judge_evaluation.py pairwise \
 
 echo ""
 echo "[info] end=$(date)"
-echo "[info] outputs in data/evaluation/judge_stance/ and data/evaluation/judge_pairwise/"
+echo "[info] outputs in data/evaluation/judge_pairwise/"

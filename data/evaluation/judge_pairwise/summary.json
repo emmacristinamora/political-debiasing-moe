@@ -1,0 +1,24 @@
+{
+  "judge_model": "Qwen/Qwen2.5-7B-Instruct",
+  "baseline_system": "base",
+  "treatment_system": "moce",
+  "n_comparisons": 40,
+  "neutrality": {
+    "baseline_wins": 4,
+    "treatment_wins": 10,
+    "ties": 26,
+    "baseline_win_rate": 0.1,
+    "treatment_win_rate": 0.25,
+    "tie_rate": 0.65,
+    "fraction_order_consistent": 0.35
+  },
+  "coherence": {
+    "baseline_wins": 4,
+    "treatment_wins": 17,
+    "ties": 19,
+    "baseline_win_rate": 0.1,
+    "treatment_win_rate": 0.425,
+    "tie_rate": 0.475,
+    "fraction_order_consistent": 0.525
+  }
+}

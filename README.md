@@ -14,13 +14,25 @@ End-to-end pipeline, GPU-ready:
 
 - **Steering-vector pipeline** (`src/01_*` → `src/04_*`) — contrastive
   pairs on the economic and social axes, validation, activation extraction
-  from Mistral-7B, and steering-vector construction.
+  from Mistral-7B, and steering-vector construction (mean-difference and
+  logistic-regression methods; five layers: 8, 12, 16, 20, 24).
+- **Steering-vector validation** (`src/13_*`, `src/17_*`) — Tier 1
+  geometry checks (ROC-AUC, permutation tests, k-fold CV) and Tier 3
+  robustness checks (leave-one-group-out generalization, cross-template
+  invariance via Pearson correlation).
+- **Compass center calibration** ([src/18_compass_center.py](src/18_compass_center.py)) —
+  projects a set of politically neutral prompts at layer 20 to determine
+  Mistral-7B's baseline "neutral" position; validates against four R6
+  acceptance criteria (subcategory agreement, midpoint, outlier, bootstrap
+  stability). Required before stage 05.
 - **Expert datasets and training** (`src/05_*` → `src/08_*`) — quadrant
-  pools, dataset validation, LoRA training of the four quadrant experts,
-  and a per-expert sanity test.
+  pools from 9 corpora, topic labeling (9 topics via cosine similarity
+  to keyword prototypes), dataset validation with cell-capping and
+  document-level train/val splits, LoRA training of the four quadrant
+  experts, and a three-method behavioral test.
 - **MoCE architecture** ([src/09_moce_components.py](src/09_moce_components.py)) —
   one self-contained module with all components:
-  - `InputTransformer` projects prompts into compass space.
+  - `InputTransformer` projects prompts into compass space at layer 20.
   - `Router` emits the heuristic counterbalancing prior π₀ and the
     optional calibrated policy π = softmax(log π₀ + δ(h)).
   - `ExpertManager` runs all four LoRA experts in dense mode.
@@ -37,26 +49,50 @@ End-to-end pipeline, GPU-ready:
   candidate-trace collection, candidate scoring, dataset splitting,
   trainer, evaluator, and a top-level pipeline driver. Outputs a checkpoint
   consumable by `--router-checkpoint` on the runner.
+- **LLM-as-judge evaluation** ([src/12_judge_evaluation.py](src/12_judge_evaluation.py)) —
+  stance classification (6-point scale → compass coordinates via polarity
+  key) and blind pairwise comparison using Llama-3.1-8B-Instruct.
+- **Hein congressional validation** (`src/14_*` → `src/16_*`) — external
+  validity check: projects US congressional speeches (sessions 97–114)
+  onto the political compass and compares economic scores to DW-NOMINATE
+  dimension 1.
 
-Not implemented yet:
+Partially implemented:
 
-- `src/11_evaluation.py` — placeholder; downstream metrics (bias-radius,
-  refusal/vagueness, quality, robustness) are not wired into a CLI.
+- `src/11_moce_evaluation.py` — subcommand structure and dataclasses in
+  place; individual metric CLIs (bias-radius, refusal/vagueness, quality,
+  robustness) not yet wired up.
 
 ## Repo layout
 
 ```
 config/config.yaml          single source of truth for every stage
-src/01_…_08_…               steering vectors + expert datasets + training
+data/experts/normalize_corpora.py   corpus normalization to canonical format
+src/01_build_pairs.py       build 180 contrastive prompt pairs
+src/02_validate_pairs.py    validate pairs before activation extraction
+src/03_extract_activations.py  extract Mistral-7B activations at layers 8,12,16,20,24
+src/04_build_steering_vectors.py  mean-diff + logistic-regression steering vectors
+src/05_quadrant_datasets.py score + chunk corpora, assign quadrant + topic
+src/06_validate_experts_datasets.py  train/val splits with cell-capping
+src/07_train_experts.py     LoRA training of the four quadrant experts
+src/08_test_experts.py      three-method behavioral evaluation of experts
 src/09_moce_components.py   MoCE architecture (InputTransformer, Router,
                             ExpertManager, Editor, MoCEEngine)
-src/10_run_moce.py          end-to-end inference runner (this README)
-src/11_evaluation.py        stub
+src/10_run_moce.py          end-to-end inference runner
+src/11_moce_evaluation.py   evaluation stub (subcommand structure in place)
+src/12_judge_evaluation.py  LLM-as-judge stance + pairwise evaluation
+src/13_steering_vector_geometry.py  Tier 1 vector geometry checks
+src/17_steering_vector_robustness.py  Tier 3 leave-one-out + template invariance
+src/18_compass_center.py    compute compass center from neutral prompts
+src/14_hein_build_dataset.py  }
+src/15_hein_project_compass.py  } external validity via Hein congressional + DW-NOMINATE
+src/16_hein_dwnominate_analysis.py  }
 src/router_training/        calibrated-router training pipeline + CLI
 batch/                      SLURM submission scripts for cluster runs
-notebooks/                  exploratory analysis (steering vectors, experts)
+notebooks/                  exploratory analysis (steering vectors, experts, evaluation)
 tests/                      pytest suite (engine + router_training)
-docs/                       calibrated-router pipeline docs
+docs/                       training analysis + calibrated-router pipeline docs
+context.md                  full technical context for the paper write-up
 ```
 
 ## Running the engine
@@ -253,11 +289,30 @@ edit_steps:    1  stopped_early=False
 The numbered scripts under `src/` form an offline pipeline that produces
 the artifacts consumed by `10_run_moce.py`:
 
-- **Steering vectors** (`01` → `04`): produces `data/steering-vectors/vectors/{economic,social}_vectors.pt`.
-- **Quadrant datasets** (`05` → `06`): produces the train/val splits used to fine-tune the experts.
-- **Expert training** (`07`): LoRA-trains the four quadrant experts. Outputs land under `data/experts/`.
-- **Expert testing** (`08`): per-expert sanity checks.
-- **Calibrated router** ([src/router_training/](src/router_training/)): prompt-set construction → features → forced-policy traces → scored candidates → dataset splits → trainer → evaluator. See [docs/router_calibration_pipeline.md](docs/router_calibration_pipeline.md). The trainer's checkpoint is the file you pass to `--router-checkpoint` on the runner.
+- **Corpus normalization** (`data/experts/normalize_corpora.py`): converts
+  raw corpora (CSV, JSON, RDS) to the canonical `Document` JSONL schema.
+- **Steering vectors** (`01` → `04`): 180 contrastive pairs → activations at
+  5 layers → mean-difference and logistic-regression vectors. Produces
+  `data/steering-vectors/vectors/{economic,social}_vectors.pt`.
+- **Steering vector validation** (`13`, `17`): geometry and robustness checks.
+  Run after `04` to verify the vectors before using them downstream.
+- **Compass center** (`18`): projects neutral prompts at layer 20, validates
+  against 4 acceptance criteria. Produces `data/compass_center/center.json`.
+  Must run before `05`.
+- **Quadrant datasets** (`05` → `06`): scores and chunks all corpora, assigns
+  quadrant and topic labels, then builds balanced train/val splits.
+- **Expert training** (`07`): LoRA-trains the four quadrant experts (r=8,
+  q_proj+v_proj, bfloat16). Outputs land under `data/experts/`.
+- **Expert testing** (`08`): three-method behavioral evaluation
+  (Representativeness, Inverse Steerability, Consistency).
+- **Calibrated router** ([src/router_training/](src/router_training/)): 11-step
+  pipeline: prompt-set → features → forced-policy traces → scored candidates →
+  target policies → dataset splits → trainer → evaluator. See
+  [docs/router_calibration_pipeline.md](docs/router_calibration_pipeline.md).
+  The checkpoint is the file you pass to `--router-checkpoint`.
+- **Judge evaluation** (`12`): stance classification and pairwise comparison
+  using Llama-3.1-8B-Instruct.
+- **Hein validation** (`14` → `16`): external DW-NOMINATE correlation check.
 
 SLURM submission scripts for the cluster jobs are in [batch/](batch/).
 

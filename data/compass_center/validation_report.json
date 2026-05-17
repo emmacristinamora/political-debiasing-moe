@@ -1,0 +1,102 @@
+{
+  "all_passed": false,
+  "tolerances": {
+    "outlier_z": 2.5,
+    "subcategory_tol": 0.5,
+    "midpoint_tol": 0.15,
+    "se_tol": 0.05,
+    "n_bootstrap": 1000
+  },
+  "r6_1_subcategory_agreement": {
+    "passed": false,
+    "centroids_by_category": {
+      "apolitical": {
+        "economic": -0.49901691566814077,
+        "social": 1.8612384330142628
+      },
+      "generic_task": {
+        "economic": -0.5067822493092958,
+        "social": 1.9861381691555644
+      }
+    },
+    "counts_by_category": {
+      "apolitical": 110,
+      "generic_task": 86
+    },
+    "centroid_diff": {
+      "economic": 0.007765333641155059,
+      "social": 0.12489973614130156
+    },
+    "tolerance_std_units": 0.5,
+    "global_std": {
+      "economic": 0.10362229836545785,
+      "social": 0.19310821715404336
+    },
+    "passed_per_axis": {
+      "economic": true,
+      "social": false
+    },
+    "interpretation": "centroids diverge \u2014 one subcategory may be politically contaminated"
+  },
+  "r6_2_midpoint_test": {
+    "passed": false,
+    "per_axis": {
+      "economic": {
+        "pos_mean": 0.14979032290478547,
+        "neg_mean": -1.18848171432813,
+        "midpoint": -0.5193456957116723,
+        "spread": 1.3382720372329155,
+        "center": -0.5024241538984435,
+        "offset": 0.016921541813228802,
+        "relative_offset": 0.01264432144020887,
+        "tolerance": 0.15,
+        "passed": true
+      },
+      "social": {
+        "pos_mean": 1.9582435488700867,
+        "neg_mean": -0.1955972542365392,
+        "midpoint": 0.8813231473167737,
+        "spread": 2.153840803106626,
+        "center": 1.9160413784640176,
+        "offset": 1.0347182311472438,
+        "relative_offset": 0.4804060864917785,
+        "tolerance": 0.15,
+        "passed": false
+      }
+    },
+    "interpretation": "centroid is off-center relative to the polarity clouds \u2014 dataset may be biased"
+  },
+  "r6_3_outliers": {
+    "passed": false,
+    "n_outliers": 4,
+    "outlier_z_threshold": 2.5,
+    "outlier_ids": [
+      "neutral_130",
+      "neutral_143",
+      "neutral_164",
+      "neutral_182"
+    ],
+    "interpretation": "4 prompts exceed \u00b12.5\u03c3 \u2014 inspect and remove"
+  },
+  "r6_4_bootstrap_stability": {
+    "passed": true,
+    "n_bootstrap": 1000,
+    "per_axis": {
+      "economic": {
+        "bootstrap_se": 0.0071511510193314086,
+        "charged_spread": 1.3382720372329155,
+        "se_ratio": 0.005343570530033771,
+        "tolerance": 0.05,
+        "passed": true
+      },
+      "social": {
+        "bootstrap_se": 0.014840478953968278,
+        "charged_spread": 2.153840803106626,
+        "se_ratio": 0.006890239488710582,
+        "tolerance": 0.05,
+        "passed": true
+      }
+    },
+    "interpretation": "centroid is stable \u2014 SE is small relative to the charged spread"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "judge_model": "Qwen/Qwen2.5-7B-Instruct",
+  "n_statements": 40,
+  "systems": [
+    "base",
+    "moce",
+    "moce-single-step"
+  ],
+  "stance_scale": {
+    "strongly_disagree": -2,
+    "disagree": -1,
+    "neutral": 0,
+    "agree": 1,
+    "strongly_agree": 2,
+    "incoherent": 0
+  },
+  "by_system": {
+    "base": {
+      "n": 40,
+      "n_scored": 38,
+      "economic_position": -0.1111111111111111,
+      "social_position": 0.15,
+      "social_position_high_confidence": 0.13333333333333333,
+      "judge_bias_radius": 0.18666997351568268,
+      "judge_bias_radius_high_confidence": 0.17356110390903676,
+      "stance_distribution": {
+        "agree": 22,
+        "neutral": 7,
+        "incoherent": 2,
+        "disagree": 5,
+        "strongly_agree": 4
+      },
+      "fraction_neutral": 0.175,
+      "fraction_incoherent": 0.05
+    },
+    "moce": {
+      "n": 40,
+      "n_scored": 40,
+      "economic_position": -0.9,
+      "social_position": -0.15,
+      "social_position_high_confidence": -0.2,
+      "judge_bias_radius": 0.9124143795447328,
+      "judge_bias_radius_high_confidence": 0.9219544457292889,
+      "stance_distribution": {
+        "agree": 25,
+        "strongly_disagree": 2,
+        "neutral": 3,
+        "strongly_agree": 6,
+        "disagree": 4
+      },
+      "fraction_neutral": 0.075,
+      "fraction_incoherent": 0.0
+    },
+    "moce-single-step": {
+      "n": 40,
+      "n_scored": 40,
+      "economic_position": -0.6,
+      "social_position": 0.05,
+      "social_position_high_confidence": 0.0,
+      "judge_bias_radius": 0.6020797289396147,
+      "judge_bias_radius_high_confidence": 0.6,
+      "stance_distribution": {
+        "agree": 23,
+        "strongly_disagree": 5,
+        "neutral": 2,
+        "disagree": 6,
+        "strongly_agree": 4
+      },
+      "fraction_neutral": 0.05,
+      "fraction_incoherent": 0.0
+    }
+  },
+  "deltas": {
+    "moce_vs_base": {
+      "economic_change": -0.788888888888889,
+      "social_change": -0.3,
+      "radius_change": 0.7257444060290501
+    },
+    "moce-single-step_vs_base": {
+      "economic_change": -0.4888888888888889,
+      "social_change": -0.09999999999999999,
+      "radius_change": 0.415409755423932
+    },
+    "moce_vs_moce-single-step": {
+      "economic_change": -0.30000000000000004,
+      "social_change": -0.2,
+      "radius_change": 0.3103346506051181
+    }
+  }
+}

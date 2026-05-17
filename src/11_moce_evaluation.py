@@ -191,12 +191,14 @@ def load_prompt_records(path: Path) -> list[PromptRecord]:
         does not, so a failed whole-file parse triggers line-by-line decoding.
         A JSON object is expected to hold prompts under a "statements" or
         "prompts" list. Each item must provide a text field ("text",
-        "prompt_text", or "statement") and may carry "id"/"prompt_id" and
-        "axis". The file stem becomes the source tag for grouped reporting.
+        "prompt_text", or "statement") and may carry "id"/"prompt_id",
+        "axis", and "source". A per-item "source" tags that prompt for
+        grouped reporting, so a merged prompt set keeps its charged/neutral
+        split; when absent, the file stem is used as the source tag.
     """
     if not path.is_file():
         raise FileNotFoundError(f"prompts file not found: {path}")
-    source = path.stem
+    file_source = path.stem
     raw_text = path.read_text(encoding="utf-8").strip()
     if not raw_text:
         raise ValueError(f"prompts file is empty: {path}")
@@ -235,8 +237,14 @@ def load_prompt_records(path: Path) -> list[PromptRecord]:
         text = item.get("text") or item.get("prompt_text") or item.get("statement")
         if not isinstance(text, str) or not text.strip():
             raise ValueError(f"{path} item {index}: missing a non-empty text field")
-        raw_id = item.get("id", item.get("prompt_id", f"{source}_{index}"))
+        raw_id = item.get("id", item.get("prompt_id", f"{file_source}_{index}"))
         axis = item.get("axis")
+        row_source = item.get("source")
+        source = (
+            row_source.strip()
+            if isinstance(row_source, str) and row_source.strip()
+            else file_source
+        )
         records.append(
             PromptRecord(
                 prompt_id=str(raw_id),

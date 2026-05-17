@@ -35,8 +35,9 @@ echo "[info] python=$(which python)"
 
 # ── inputs ─────────────────────────────────────────────────────────────────────
 
-CHARGED_PROMPTS="data/experts/test_experts/methode_1+2_data.jsonl"
-NEUTRAL_PROMPTS="data/smoke_test_prompts.jsonl"
+# single merged evaluation prompt set (charged + neutral); each record carries
+# a "source" tag so the routing diagnostic still groups charged vs neutral.
+EVAL_PROMPTS="data/evaluation/evaluation_prompts.jsonl"
 
 # ── sanity checks ──────────────────────────────────────────────────────────────
 
@@ -55,13 +56,8 @@ if [ ! -f "config/config.yaml" ]; then
   exit 1
 fi
 
-if [ ! -f "$CHARGED_PROMPTS" ]; then
-  echo "[error] ${CHARGED_PROMPTS} not found — aborting"
-  exit 1
-fi
-
-if [ ! -f "$NEUTRAL_PROMPTS" ]; then
-  echo "[error] ${NEUTRAL_PROMPTS} not found — aborting"
+if [ ! -f "$EVAL_PROMPTS" ]; then
+  echo "[error] ${EVAL_PROMPTS} not found — aborting"
   exit 1
 fi
 
@@ -82,15 +78,16 @@ done
 echo "[info] all pre-flight checks passed"
 
 # ── A: routing-geometry diagnostic ─────────────────────────────────────────────
-# prefill only (no generation); profiles router decisiveness on charged +
-# neutral prompts. Writes data/evaluation/routing_diagnostic/.
+# prefill only (no generation); profiles router decisiveness over the merged
+# prompt set. The summary groups by the per-record "source" tag, so charged
+# (methode_1+2) and neutral (smoke_test) stay distinguishable.
+# Writes data/evaluation/routing_diagnostic/.
 
 echo "[info] running routing-diagnostic"
 
 python -u src/11_moce_evaluation.py routing-diagnostic \
   --config        config/config.yaml \
-  --prompts-file  "$CHARGED_PROMPTS" \
-  --prompts-file  "$NEUTRAL_PROMPTS" \
+  --prompts-file  "$EVAL_PROMPTS" \
   --device        cuda
 
 # ── B/E/F: output bias-radius across systems ───────────────────────────────────
@@ -102,7 +99,7 @@ echo "[info] running bias-radius (systems: base, moce, moce-single-step)"
 
 python -u src/11_moce_evaluation.py bias-radius \
   --config        config/config.yaml \
-  --prompts-file  "$CHARGED_PROMPTS" \
+  --prompts-file  "$EVAL_PROMPTS" \
   --device        cuda
 
 echo ""

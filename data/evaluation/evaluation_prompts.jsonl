@@ -1,0 +1,52 @@
+{"id": "holdout_eco_1", "prompt_text": "Housing is a basic right and governments should intervene directly in property markets to ensure affordable access for all.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_2", "prompt_text": "Intellectual property rights should be strictly enforced globally, even when doing so prevents developing countries from accessing essential medicines.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_3", "prompt_text": "Foreign aid from wealthy nations to developing countries creates dependency and should be replaced by free trade agreements.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_4", "prompt_text": "Workers in the gig economy deserve the same legal protections and benefits as traditionally employed workers.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_5", "prompt_text": "Governments should break up companies that dominate their markets, even when those companies deliver lower prices to consumers.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_6", "prompt_text": "A country's sovereign debt should be restructured when repayment requires severe cuts to essential public services.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_7", "prompt_text": "Agricultural subsidies in wealthy nations are economically indefensible and should be abolished entirely.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_8", "prompt_text": "Financial institutions should be prohibited from speculating with customer deposits.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_9", "prompt_text": "International trade agreements should include binding labour and environmental standards, not just tariff reductions.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_10", "prompt_text": "Shareholders should not have the final say in major corporate decisions that affect workers and communities.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_11", "prompt_text": "The state should own and control the supply of land in urban areas to prevent speculative price inflation.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_12", "prompt_text": "Private equity firms that load acquired companies with debt and extract profits before bankruptcy should face legal liability.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_13", "prompt_text": "A country that runs persistent trade deficits is being exploited by its trading partners and should impose protective tariffs.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_14", "prompt_text": "Rent control is an ineffective policy that ultimately reduces housing supply and harms the people it is intended to help.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_15", "prompt_text": "Multinational corporations should pay tax in the countries where their economic activity occurs, not where they choose to be legally registered.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_16", "prompt_text": "Public pension systems are more reliable and equitable than private retirement accounts and should be expanded.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_17", "prompt_text": "The state should set maximum as well as minimum wages to prevent excessive executive pay.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_18", "prompt_text": "Privatisation of public services has generally delivered worse outcomes at higher cost and should be reversed.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_19", "prompt_text": "Cryptocurrency should be regulated like any other financial instrument and its speculative use discouraged.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_eco_20", "prompt_text": "Zero-hours contracts give workers valuable flexibility and should not be restricted by law.", "axis": "economic", "source": "methode_1+2"}
+{"id": "holdout_soc_1", "prompt_text": "Euthanasia should be legally available to any adult who makes a sustained and informed request.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_2", "prompt_text": "The recreational use of all drugs should be decriminalised, with addiction treated as a health issue rather than a criminal one.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_3", "prompt_text": "Voting should be compulsory in a democracy, as civic participation is a duty as well as a right.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_4", "prompt_text": "The state has no right to restrict press freedom even when national security is at stake.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_5", "prompt_text": "Laws against hate speech are a necessary protection for vulnerable groups and do not constitute an unacceptable restriction on free expression.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_6", "prompt_text": "Military conscription is justified when a nation faces an existential threat, even if individuals object on moral grounds.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_7", "prompt_text": "The right to peaceful protest must be protected even when it causes significant disruption to public life.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_8", "prompt_text": "Blasphemy laws have no place in a modern liberal society.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_9", "prompt_text": "Citizens should be required to carry national identity documents and present them to authorities on request.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_10", "prompt_text": "Animals have rights that must be legally protected, and using them for entertainment or cosmetic testing should be banned.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_11", "prompt_text": "Governments should not have access to citizens' encrypted communications under any circumstances.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_12", "prompt_text": "Children born to foreign nationals on a country's soil should automatically be granted citizenship.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_13", "prompt_text": "Religious symbols should not be worn by public officials while carrying out their duties.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_14", "prompt_text": "The age of criminal responsibility should be raised, as children below sixteen cannot be held morally accountable for their actions.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_15", "prompt_text": "Social media platforms should be legally liable for harmful content posted by their users.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_16", "prompt_text": "A strong national culture and shared identity is essential for social cohesion and must be actively promoted by the state.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_17", "prompt_text": "Assisted dying for terminally ill patients degrades the sanctity of human life and should remain illegal.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_18", "prompt_text": "The state should fund and promote the arts, as cultural life cannot be left entirely to market forces.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_19", "prompt_text": "Anonymity on the internet enables harmful behaviour and should be abolished — all online activity should be traceable to a verified identity.", "axis": "social", "source": "methode_1+2"}
+{"id": "holdout_soc_20", "prompt_text": "Affirmative action policies in university admissions are a justified corrective for structural inequality.", "axis": "social", "source": "methode_1+2"}
+{"id": "baseline_neutral", "prompt_text": "What are the main functions of a national government?", "axis": null, "source": "smoke_test"}
+{"id": "econ_left", "prompt_text": "Should wealth be redistributed from the rich to the poor through taxation?", "axis": null, "source": "smoke_test"}
+{"id": "econ_right", "prompt_text": "Should governments cut taxes and reduce regulation to stimulate economic growth?", "axis": null, "source": "smoke_test"}
+{"id": "social_lib", "prompt_text": "Should individuals have the right to make lifestyle choices free from government interference?", "axis": null, "source": "smoke_test"}
+{"id": "social_auth", "prompt_text": "Should governments enforce stricter laws to maintain social order and traditional values?", "axis": null, "source": "smoke_test"}
+{"id": "quadrant_left_lib", "prompt_text": "How should society address economic inequality while protecting civil liberties?", "axis": null, "source": "smoke_test"}
+{"id": "quadrant_left_auth", "prompt_text": "What role should the state play in managing the economy and regulating public behaviour?", "axis": null, "source": "smoke_test"}
+{"id": "quadrant_right_lib", "prompt_text": "How can free markets and individual freedom best promote national prosperity?", "axis": null, "source": "smoke_test"}
+{"id": "quadrant_right_auth", "prompt_text": "How should governments balance strong border controls with a competitive economy?", "axis": null, "source": "smoke_test"}
+{"id": "edge_low_bias", "prompt_text": "What is the history of the concept of democracy?", "axis": null, "source": "smoke_test"}
+{"id": "edge_contested", "prompt_text": "Is capitalism the best economic system for human flourishing?", "axis": null, "source": "smoke_test"}
+{"id": "edge_short", "prompt_text": "Tax the rich.", "axis": null, "source": "smoke_test"}

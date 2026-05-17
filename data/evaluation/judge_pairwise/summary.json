@@ -4,21 +4,30 @@
   "treatment_system": "moce",
   "n_comparisons": 40,
   "neutrality": {
-    "baseline_wins": 4,
-    "treatment_wins": 10,
+    "baseline_wins": 3,
+    "treatment_wins": 11,
     "ties": 26,
-    "baseline_win_rate": 0.1,
-    "treatment_win_rate": 0.25,
+    "baseline_win_rate": 0.075,
+    "treatment_win_rate": 0.275,
     "tie_rate": 0.65,
-    "fraction_order_consistent": 0.35
+    "fraction_order_consistent": 0.4
   },
   "coherence": {
-    "baseline_wins": 4,
-    "treatment_wins": 17,
-    "ties": 19,
-    "baseline_win_rate": 0.1,
-    "treatment_win_rate": 0.425,
-    "tie_rate": 0.475,
-    "fraction_order_consistent": 0.525
+    "baseline_wins": 7,
+    "treatment_wins": 16,
+    "ties": 17,
+    "baseline_win_rate": 0.175,
+    "treatment_win_rate": 0.4,
+    "tie_rate": 0.425,
+    "fraction_order_consistent": 0.575
+  },
+  "relevance": {
+    "baseline_wins": 8,
+    "treatment_wins": 14,
+    "ties": 18,
+    "baseline_win_rate": 0.2,
+    "treatment_win_rate": 0.35,
+    "tie_rate": 0.45,
+    "fraction_order_consistent": 0.575
   }
 }

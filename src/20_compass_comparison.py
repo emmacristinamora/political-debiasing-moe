@@ -363,45 +363,21 @@ def generate_responses_standard(
     return responses
 
 
-def generate_standard(
-    model_id: str,
-    prompts: list[dict[str, Any]],
-    args: argparse.Namespace,
-    dtype: torch.dtype,
-) -> list[dict[str, Any]]:
-    """
-    Load a standard HuggingFace model, generate N responses per prompt,
-    unload the model, and return a list of per-prompt records.
-    """
-    model, tokenizer = load_standard_model(model_id, dtype, args.device)
-    records: list[dict[str, Any]] = []
-
-    for i, prompt in enumerate(prompts, 1):
-        pid  = prompt["id"]
-        text = prompt["prompt_text"]
-        print(f"  [{i}/{len(prompts)}] {pid}")
+def generate_responses_moce(
+    engine: Any,
+    prompt_text: str,
+    n: int,
+) -> list[str]:
+    """Call engine.run() n times and return the final_text from each result."""
+    responses: list[str] = []
+    for _ in range(n):
         try:
-            responses = generate_responses_standard(
-                model, tokenizer, text,
-                n=args.n_responses,
-                temperature=args.temperature,
-                max_new_tokens=args.max_new_tokens,
-                device=args.device,
-            )
+            result = engine.run(prompt_text)
+            responses.append(result.final_text)
         except Exception as exc:
-            print(f"    WARNING: generation failed for {pid}: {exc}")
-            responses = []
-        records.append({
-            "prompt_id":   pid,
-            "prompt_text": text,
-            "model_id":    model_id,
-            "responses":   responses,
-        })
-
-    del model
-    torch.cuda.empty_cache()
-    gc.collect()
-    return records
+            print(f"    WARNING: MoCE run failed: {exc}")
+            responses.append("")
+    return responses
 
 
 # === HELPERS: GENERATION — MoCE ENGINE ===
@@ -524,47 +500,6 @@ def build_moce_engine(
     return engine, moce
 
 
-def generate_moce(
-    raw_cfg: dict[str, Any],
-    prompts: list[dict[str, Any]],
-    args: argparse.Namespace,
-    dtype: torch.dtype,
-) -> list[dict[str, Any]]:
-    """
-    Build the MoCEEngine, call engine.run() N times per prompt, collect
-    the final_text from each MoCEResult, unload, and return records.
-
-    Each call to engine.run() is independent; with do_sample=True the editor's
-    expert-mixing + decoding will produce different outputs on each call.
-    """
-    engine, _ = build_moce_engine(raw_cfg, args, dtype)
-    records: list[dict[str, Any]] = []
-
-    for i, prompt in enumerate(prompts, 1):
-        pid  = prompt["id"]
-        text = prompt["prompt_text"]
-        print(f"  [{i}/{len(prompts)}] {pid}")
-        responses: list[str] = []
-        for _ in range(args.n_responses):
-            try:
-                result = engine.run(text)
-                responses.append(result.final_text)
-            except Exception as exc:
-                print(f"    WARNING: MoCE run failed for {pid}: {exc}")
-                responses.append("")
-        records.append({
-            "prompt_id":   pid,
-            "prompt_text": text,
-            "model_id":    "run_moce",
-            "responses":   responses,
-        })
-
-    del engine
-    torch.cuda.empty_cache()
-    gc.collect()
-    return records
-
-
 # === STEP 1: GENERATION ===
 
 def run_generation_phase(
@@ -574,35 +509,89 @@ def run_generation_phase(
     raw_cfg: dict[str, Any],
 ) -> None:
     """
-    Generate and cache responses for every model.
+    Generate and cache responses for every model, one prompt at a time.
 
     For each model:
-      - Check if a cache file already exists (skip if so).
-      - If model_id == "run_moce": build the MoCE engine and call engine.run().
-      - Otherwise: load a standard HuggingFace model and call model.generate().
-      - Save the per-prompt records to a JSONL cache file.
+      - Load the existing cache to find already-completed prompt IDs.
+      - Skip the model entirely if all prompts are done.
+      - Otherwise load the model/engine, generate only the remaining prompts,
+        and append each result to the cache file immediately after generation.
       - Explicitly free GPU memory before loading the next model.
+
+    Writing one record per prompt (append mode) means any timeout or crash
+    loses at most one prompt's work, and the script resumes cleanly from the
+    last completed prompt on the next run.
     """
     print("\n=== STEP 1: GENERATION ===")
 
     for model_id in args.models:
         cache = responses_cache_path(args.out_dir, model_id)
-        if cache.is_file():
-            existing = load_jsonl(cache)
-            if len(existing) >= len(prompts):
-                print(f"[{model_id}] cache complete ({len(existing)} prompts) — skipping")
-                continue
-            print(f"[{model_id}] cache incomplete ({len(existing)}/{len(prompts)}) — regenerating")
+        cache.parent.mkdir(parents=True, exist_ok=True)
 
-        print(f"\n[{model_id}] generating {args.n_responses} responses × {len(prompts)} prompts")
+        existing   = load_jsonl(cache) if cache.is_file() else []
+        done_ids   = {r["prompt_id"] for r in existing}
+        remaining  = [p for p in prompts if p["id"] not in done_ids]
+        total      = len(prompts)
 
-        if model_id == "run_moce":
-            records = generate_moce(raw_cfg, prompts, args, dtype)
+        if not remaining:
+            print(f"[{model_id}] cache complete ({total}/{total}) — skipping")
+            continue
+
+        if existing:
+            print(f"\n[{model_id}] resuming — {len(existing)}/{total} done, "
+                  f"{len(remaining)} remaining")
         else:
-            records = generate_standard(model_id, prompts, args, dtype)
+            print(f"\n[{model_id}] generating {args.n_responses} responses "
+                  f"× {total} prompts")
 
-        save_jsonl(records, cache)
-        print(f"  saved {len(records)} records → {cache}")
+        # Load model or engine once for all remaining prompts.
+        if model_id == "run_moce":
+            engine, _ = build_moce_engine(raw_cfg, args, dtype)
+        else:
+            model, tokenizer = load_standard_model(model_id, dtype, args.device)
+
+        # Open cache in append mode and write each prompt immediately.
+        with cache.open("a", encoding="utf-8") as fh:
+            for prompt in remaining:
+                pid  = prompt["id"]
+                text = prompt["prompt_text"]
+                done_so_far = len(done_ids) + 1
+                print(f"  [{done_so_far}/{total}] {pid}")
+
+                try:
+                    if model_id == "run_moce":
+                        responses = generate_responses_moce(engine, text, args.n_responses)
+                    else:
+                        responses = generate_responses_standard(
+                            model, tokenizer, text,
+                            n=args.n_responses,
+                            temperature=args.temperature,
+                            max_new_tokens=args.max_new_tokens,
+                            device=args.device,
+                        )
+                except Exception as exc:
+                    print(f"    WARNING: generation failed for {pid}: {exc}")
+                    responses = []
+
+                record = {
+                    "prompt_id":   pid,
+                    "prompt_text": text,
+                    "model_id":    model_id,
+                    "responses":   responses,
+                }
+                fh.write(json.dumps(record) + "\n")
+                fh.flush()          # ensure it hits disk before moving on
+                done_ids.add(pid)
+
+        print(f"  cache complete → {cache}")
+
+        # Free GPU memory before loading the next model.
+        if model_id == "run_moce":
+            del engine
+        else:
+            del model
+        torch.cuda.empty_cache()
+        gc.collect()
 
 
 # === STEP 2: PROJECTION ===

@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=4:00:00
+#SBATCH --time=14:00:00
 #SBATCH --output=logs/compass_comparison_%j.out
 #SBATCH --error=logs/compass_comparison_%j.err
 #SBATCH --requeue
@@ -94,7 +94,7 @@ echo "[info] all pre-flight checks passed"
 #   Gemma 2 9B          ~8 min
 #   projection phase    ~6 min
 #   ─────────────────────────────
-#   total               ~130 min  (4h wall time includes buffer)
+#   total               ~270 min  (8h wall time includes buffer)
 #
 # The script caches responses per model to
 #   data/evaluation/compass_comparison/responses/<model_key>.jsonl

@@ -34,31 +34,48 @@ echo "[info] repo_root=${REPO_ROOT}"
 echo "[info] python=$(which python)"
 
 # ── inputs / outputs ───────────────────────────────────────────────────────────
+# neutral_prompts.jsonl must follow the R5 schema:
+#   {id, category, subtype, topic, text}  where category ∈ {apolitical, generic_task}
 
 DATASET="data/neutral_prompts.jsonl"
+PAIRS_DIR="data/steering-vectors/validated_pairs"
 OUTPUT="data/compass_center/center.json"
+REPORT="data/compass_center/validation_report.json"
 
 # ── sanity checks ──────────────────────────────────────────────────────────────
 
-if [ ! -f "$DATASET" ]; then
-  echo "[error] dataset not found: ${DATASET} — update the path and resubmit"
-  exit 1
-fi
+for required in "$DATASET" \
+                "${PAIRS_DIR}/economic_pairs_validated.jsonl" \
+                "${PAIRS_DIR}/social_pairs_validated.jsonl" \
+                "src/18_compass_center.py"; do
+  if [ ! -f "$required" ]; then
+    echo "[error] required file not found: ${required}"
+    exit 1
+  fi
+done
 
-if [ ! -f "src/18_compass_center.py" ]; then
-  echo "[error] src/18_compass_center.py not found — aborting"
-  exit 1
-fi
+# quick schema check — must have the R5 fields
+python -c "
+import json, sys
+row = json.loads(open('${DATASET}').readline())
+missing = {'id','category','subtype','topic','text'} - set(row.keys())
+if missing:
+    print('[error] neutral_prompts.jsonl missing fields:', sorted(missing)); sys.exit(1)
+print('[info] schema OK:', list(row.keys()))
+"
 
 # ── run ────────────────────────────────────────────────────────────────────────
 
-echo "[info] projecting neutral prompts onto the compass"
+echo "[info] projecting neutral prompts and running R6 validation checks"
 
 python -u src/18_compass_center.py \
-  --dataset    "$DATASET" \
-  --output     "$OUTPUT"  \
+  --dataset    "$DATASET"   \
+  --pairs-dir  "$PAIRS_DIR" \
+  --output     "$OUTPUT"    \
+  --report     "$REPORT"    \
   --device     cuda
 
 echo ""
 echo "[info] end=$(date)"
-echo "[info] center written to: ${OUTPUT}"
+echo "[info] center:  ${OUTPUT}"
+echo "[info] report:  ${REPORT}"

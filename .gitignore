@@ -47,6 +47,10 @@ notebooks/**/.ipynb_checkpoints/
 
 # large archives
 *.zip
-# Large local data artifacts
+# large local data artifacts
 /data/experts/quadrant-pools-new/
 /data/experts/raw/normalized/*.jsonl
+
+# markdowns
+# *.md
+# docs/

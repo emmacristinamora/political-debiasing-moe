@@ -154,10 +154,8 @@ _REQUIRED_KEYS = {
 def load_config(path: Path) -> dict:
     """
     Read and validate config.yaml.
-
     Args:
         path: path to config.yaml.
-
     Returns:
         Full parsed config dictionary.
     """
@@ -294,13 +292,11 @@ def load_quadrant_pool(
 ) -> list[Chunk]:
     """
     Load retained chunks for one quadrant.
-
     Args:
         retained_dir: root path with layout <source>/<quadrant>/retained.jsonl.
         quadrant: quadrant name.
         min_tokens: minimum token length.
         max_tokens: maximum token length.
-
     Returns:
         List of Chunk objects.
     """

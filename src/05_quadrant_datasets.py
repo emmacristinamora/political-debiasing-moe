@@ -207,7 +207,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config-yaml-path", type=Path, default=CONFIG_PATH)
 
-    # Optional overrides — if omitted, values come from config.yaml
+    # optional overrides — if omitted, values come from config.yaml
     parser.add_argument("--model-name-or-path", type=str, default=None)
     parser.add_argument("--normalized-dir", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
@@ -271,7 +271,7 @@ def build_config(args: argparse.Namespace) -> BuildConfig:
         return PROJECT_ROOT / raw
 
     base_output_dir = _path(args.output_dir, "output_dir")
-    # Each source gets its own subdirectory so runs accumulate without overwriting.
+    # each source gets its own subdirectory so runs accumulate without overwriting.
     source_output_dir = base_output_dir / args.source
 
     return BuildConfig(
@@ -400,7 +400,7 @@ def iter_raw_documents(config: BuildConfig) -> Iterator[RawDocument]:
             f"Run normalize_corpora.py --source {config.source} first."
         )
 
-    # HoC subsampling: build the keep-set in a first pass.
+    # HoC subsampling: build the keep-set in a first pass
     sample_index: Optional[Set[int]] = None
     if config.source == "hoc" and config.hoc_sample_n is not None:
         sample_index = _build_hoc_sample_index(jsonl_path, config.hoc_sample_n)
@@ -747,7 +747,7 @@ def build_scored_chunks(
     n_chunks_total = 0
     n_retained = 0
 
-    # Each item: (document, chunk_id, chunk_text, n_tokens)
+    # each item: (document, chunk_id, chunk_text, n_tokens)
     batch: List[Tuple[RawDocument, str, str, int]] = []
 
     def flush(items: List[Tuple[RawDocument, str, str, int]]) -> None:

@@ -51,7 +51,7 @@ _DTYPE_MAP: dict[str, Any] = (
     else {"bfloat16": "bfloat16", "float16": "float16", "float32": "float32"}
 )
 
-# Matches "Answer on the following scale: ..." sentence at end of persona prompts.
+# matches "Answer on the following scale: ..." sentence at end of persona prompts.
 _SCALE_INSTRUCTION_RE = re.compile(
     r"\s*Answer on the following scale[^.]*\.",
     re.IGNORECASE,
@@ -172,10 +172,8 @@ def load_model_and_tokenizer(
 ) -> tuple[Any, AutoTokenizer]:
     """
     Load base model + optional PEFT adapter, and tokenizer.
-
     Reloads the base model from scratch for each condition so adapter state
     never leaks between conditions.
-
     Logic:
         Loads tokenizer, aliases pad→eos for Mistral, loads base model at
         requested dtype, moves to device, sets eval mode, then wraps with
@@ -323,7 +321,7 @@ def compute_pct_projection(
     attention_mask = enc["attention_mask"].to(device)
     seq_len        = input_ids.shape[1]
 
-    # Build pool_mask: start from attention_mask, then zero out prefix tokens.
+    # build pool_mask: start from attention_mask, then zero out prefix tokens.
     pool_mask = attention_mask.clone()  # [1, seq_len]
     if prefix_text is not None:
         prefix_enc = tokenizer(
@@ -336,7 +334,7 @@ def compute_pct_projection(
         n_prefix = prefix_enc["input_ids"].shape[1]
         n_mask   = min(n_prefix, seq_len)
         pool_mask[0, :n_mask] = 0
-        # Fallback: if no response tokens remain, pool over everything.
+        # fallback: if no response tokens remain, pool over everything.
         if pool_mask.sum() == 0:
             pool_mask = attention_mask.clone()
 
@@ -356,7 +354,7 @@ def compute_pct_projection(
 
     layer_out = hidden_states[projection_layer]  # [1, seq_len, hidden_dim]
 
-    # Mean pool over response tokens only (or all tokens if no prefix given).
+    # mean pool over response tokens only (or all tokens if no prefix given).
     mask   = pool_mask.unsqueeze(-1).float()                                # [1, seq_len, 1]
     pooled = (layer_out.float() * mask).sum(dim=1) / mask.sum(dim=1)       # [1, hidden_dim]
     pooled = pooled.squeeze(0)                                              # [hidden_dim]
@@ -488,7 +486,6 @@ def score_options_by_avg_nll(
 ) -> list[dict]:
     """
     Score each option by average NLL conditioned on the prompt.
-
     Logic:
         Tokenises the prompt (with BOS) and each option continuation (without
         special tokens) separately, concatenates them, runs a forward pass, and
@@ -1032,7 +1029,7 @@ def compute_combined_summary(
     all_conditions: list[ExpertCondition],
     warnings: list[str],
 ) -> dict:
-    # Index method2 designated-adversary entries by expert name
+    # index method2 designated-adversary entries by expert name
     m2_desig: dict[str, dict] = {
         e["expert"]: e for e in m2_summary if e.get("is_designated_adversary")
     }
@@ -1070,7 +1067,7 @@ def parse_args() -> argparse.Namespace:
         description="evaluate trained LoRA experts using PCT projection methods"
     )
 
-    # Required
+    # required
     p.add_argument("--model-name",             required=True)
     p.add_argument("--method12-path",          type=Path, required=True)
     p.add_argument("--method2-personas-path",  type=Path, required=True)
@@ -1086,19 +1083,19 @@ def parse_args() -> argparse.Namespace:
              "Mistral-7B has 33 states (0..32), default=20 (mid-network)",
     )
 
-    # Adapter paths — omit any to skip that expert
+    # adapter paths — omit any to skip that expert
     p.add_argument("--adapter-econ-left-authoritarian",  type=Path, default=None)
     p.add_argument("--adapter-econ-left-libertarian",    type=Path, default=None)
     p.add_argument("--adapter-econ-right-authoritarian", type=Path, default=None)
     p.add_argument("--adapter-econ-right-libertarian",   type=Path, default=None)
 
-    # Generation
+    # generation
     p.add_argument("--max-new-tokens", type=int,   default=120)
     p.add_argument("--do-sample",      action="store_true", default=False)
     p.add_argument("--temperature",    type=float, default=0.0)
     p.add_argument("--top-p",          type=float, default=1.0)
 
-    # Scope
+    # scope
     p.add_argument(
         "--run-methods",
         nargs="+",
@@ -1131,7 +1128,7 @@ def main() -> None:
     log.info("starting evaluation — methods=%s  limit=%s  dry_run=%s",
              args.run_methods, args.limit, args.dry_run)
 
-    # ── validate input paths ──────────────────────────────────────────────────
+    # validate input paths
     for attr, label in [
         ("method12_path",         "--method12-path"),
         ("method2_personas_path", "--method2-personas-path"),
@@ -1143,7 +1140,7 @@ def main() -> None:
         if not p.exists():
             raise FileNotFoundError(f"{label}: {p} not found")
 
-    # ── build expert conditions ───────────────────────────────────────────────
+    # build expert conditions
     adapter_map: dict[str, Optional[Path]] = {
         "econ_left_authoritarian":  args.adapter_econ_left_authoritarian,
         "econ_left_libertarian":    args.adapter_econ_left_libertarian,
@@ -1166,7 +1163,7 @@ def main() -> None:
         len(expert_conditions), [c.name for c in expert_conditions],
     )
 
-    # ── load datasets ─────────────────────────────────────────────────────────
+    # load datasets 
     statements = load_statements(args.method12_path)
     personas   = load_personas(args.method2_personas_path)
     questions  = load_questions(args.method3_path)
@@ -1179,7 +1176,7 @@ def main() -> None:
                 f"which is not in {EXPERT_NAMES}"
             )
 
-    # ── load steering vectors ─────────────────────────────────────────────────
+    # load steering vectors 
     dtype = _DTYPE_MAP[args.dtype]
     if args.dry_run:
         log.info("DRY-RUN: skipping steering vector load")
@@ -1193,7 +1190,7 @@ def main() -> None:
             econ_vector.shape, social_vector.shape,
         )
 
-    # ── output setup ──────────────────────────────────────────────────────────
+    # output setup 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     m1_path = args.output_dir / "method1_representativeness.jsonl"
@@ -1249,7 +1246,7 @@ def main() -> None:
     )
     log.info("run config written → %s/run_config.json", args.output_dir)
 
-    # ── load fixed base projection model ─────────────────────────────────────
+    # load fixed base projection model 
     if args.dry_run:
         proj_model, proj_tokenizer = None, None
         log.info("DRY-RUN: skipping projection model load")
@@ -1262,7 +1259,7 @@ def main() -> None:
     warnings:       list[str]  = []
     all_m1_records: list[dict] = []
 
-    # Pre-load existing method1 records when method2 requested but method1 is not
+    # pre-load existing method1 records when method2 requested but method1 is not
     if "method2" in args.run_methods and "method1" not in args.run_methods:
         existing = _read_jsonl(m1_path)
         if existing:
@@ -1279,7 +1276,7 @@ def main() -> None:
             log.warning(msg)
             warnings.append(msg)
 
-    # ── main evaluation loop ──────────────────────────────────────────────────
+    # main evaluation loop 
     for condition in all_conditions:
         log.info("")
         log.info("=" * 60)
@@ -1334,7 +1331,7 @@ def main() -> None:
         if args.device == "cuda":
             torch.cuda.empty_cache()
 
-    # ── compute and write summaries ───────────────────────────────────────────
+    # compute and write summaries 
     log.info("computing summaries")
 
     m1_records_all = _read_jsonl(m1_path)
